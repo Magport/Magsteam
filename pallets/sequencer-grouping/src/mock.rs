@@ -1,5 +1,6 @@
 use crate as pallet_sequencer_grouping;
 use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_support::traits::ConstU64;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
@@ -14,6 +15,8 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system,
 		SequencerGrouping: pallet_sequencer_grouping,
+		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
+		Multisig: pallet_multisig::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -40,7 +43,7 @@ impl frame_system::Config for Test {
 	type DbWeight = ();
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<u64>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -59,7 +62,31 @@ impl pallet_sequencer_grouping::Config for Test {
 	type MaxGroupNumber = ConstU32<10u32>;
 }
 
+impl pallet_multisig::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type Currency = Balances;
+	type DepositBase = ConstU64<1>;
+	type DepositFactor = ConstU64<1>;
+	type MaxSignatories = ConstU32<3>;
+	type WeightInfo = ();
+}
+
+#[derive_impl(pallet_balances::config_preludes::TestDefaultConfig as pallet_balances::DefaultConfig)]
+impl pallet_balances::Config for Test {
+	type ReserveIdentifier = [u8; 8];
+	type AccountStore = System;
+}
+
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	frame_system::GenesisConfig::<Test>::default().build_storage().unwrap().into()
+	let mut t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![(1, 10), (2, 10), (3, 10), (4, 10), (5, 2)],
+	}
+		.assimilate_storage(&mut t)
+		.unwrap();
+	let mut ext = sp_io::TestExternalities::new(t);
+	ext.execute_with(|| System::set_block_number(1));
+	ext
 }

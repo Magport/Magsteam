@@ -23,6 +23,7 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::Hash;
 	use sp_std::vec::Vec;
+	use pallet_multisig as multisig;
 
 	pub type RoundIndex = u32;
 
@@ -31,7 +32,7 @@ pub mod pallet {
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_multisig::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
@@ -125,7 +126,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
-		#[pallet::weight(T::WeightInfo::set_group_metric())]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_group_metric())]
 		pub fn set_group_metric(
 			origin: OriginFor<T>,
 			group_size: u32,
@@ -143,7 +144,7 @@ pub mod pallet {
 
 		//#[cfg(feature = "runtime-benchmarks")]
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::benchmark_trigger_group(
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::benchmark_trigger_group(
 			T::MaxGroupSize::get(),
 			T::MaxGroupNumber::get()
 		))]
@@ -160,6 +161,45 @@ pub mod pallet {
 				round_index,
 			);
 			Ok(())
+		}
+
+		#[pallet::call_index(2)]
+		#[pallet::weight(Weight::default())]
+		pub fn approve_multisig(
+			origin: OriginFor<T>,
+			threshold: u16,
+			other_signatories: Vec<T::AccountId>,
+			maybe_timepoint: Option<multisig::Timepoint<BlockNumberFor<T>>>,
+			call_hash: [u8; 32],
+		) -> DispatchResultWithPostInfo {
+			multisig::Pallet::<T>::approve_as_multi(
+				origin,
+				threshold,
+				other_signatories,
+				maybe_timepoint,
+				call_hash,
+				Weight::zero()
+			)
+		}
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(Weight::default())]
+		pub fn execute_multisig(
+			origin: OriginFor<T>,
+			threshold: u16,
+			other_signatories: Vec<T::AccountId>,
+			maybe_timepoint: Option<multisig::Timepoint<BlockNumberFor<T>>>,
+			call: Box<<T as pallet_multisig::Config>::RuntimeCall>,
+			max_weight: Weight
+		) -> DispatchResultWithPostInfo {
+			multisig::Pallet::<T>::as_multi(
+				origin,
+				threshold,
+				other_signatories,
+				maybe_timepoint,
+				call,
+				max_weight
+			)
 		}
 	}
 

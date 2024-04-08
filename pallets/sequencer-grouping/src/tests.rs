@@ -3,8 +3,12 @@ use crate::{
 	pallet::{GroupNumber, GroupSize},
 	Error, Event, GroupMembers, NextRound, SequencerGroup,
 };
-use frame_support::{assert_noop, assert_ok, pallet_prelude::Get};
+use frame_support::{assert_noop, assert_ok, pallet_prelude::Get, dispatch::GetDispatchInfo};
 use sp_runtime::{testing::H256, traits::BadOrigin};
+use parity_scale_codec::Encode;
+use pallet_balances::Call as BalancesCall;
+use sp_io::hashing::blake2_256;
+use pallet_multisig::Timepoint;
 
 #[test]
 fn it_works_for_set_group_metric() {
@@ -155,5 +159,46 @@ fn get_next_round_works() {
 			SequencerGrouping::next_round(),
 			NextRound { starting_block: 16, round_index: 3 }
 		);
+	});
+}
+
+fn call_transfer(dest: u64, value: u64) -> Box<RuntimeCall> {
+	Box::new(RuntimeCall::Balances(BalancesCall::transfer_allow_death { dest, value }))
+}
+
+fn now() -> Timepoint<u64> {
+	Multisig::timepoint()
+}
+
+#[test]
+fn multisig_2_of_3_works() {
+	new_test_ext().execute_with(|| {
+		let multi = Multisig::multi_account_id(&[1, 2, 3][..], 2);
+		assert_ok!(Balances::transfer_allow_death(RuntimeOrigin::signed(1), multi, 5));
+		assert_ok!(Balances::transfer_allow_death(RuntimeOrigin::signed(2), multi, 5));
+		assert_ok!(Balances::transfer_allow_death(RuntimeOrigin::signed(3), multi, 5));
+
+		let call = call_transfer(6, 15);
+		let call_weight = call.get_dispatch_info().weight;
+
+		let hash = blake2_256(&call.encode());
+		assert_ok!(SequencerGrouping::approve_multisig(
+			RuntimeOrigin::signed(1),
+			2,
+			vec![2, 3],
+			None,
+			hash,
+		));
+		assert_eq!(Balances::free_balance(6), 0);
+
+		assert_ok!(SequencerGrouping::execute_multisig(
+			RuntimeOrigin::signed(2),
+			2,
+			vec![1, 3],
+			Some(now()),
+			call,
+			call_weight
+		));
+		assert_eq!(Balances::free_balance(6), 15);
 	});
 }
