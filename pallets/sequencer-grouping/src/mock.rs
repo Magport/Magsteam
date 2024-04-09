@@ -1,6 +1,8 @@
 use crate as pallet_sequencer_grouping;
 use frame_support::{derive_impl, parameter_types, traits::Everything};
-use frame_support::traits::ConstU64;
+use frame_support::__private::RuntimeDebug;
+use frame_support::pallet_prelude::{Decode, Encode, MaxEncodedLen};
+use frame_support::traits::{ConstU64, Contains, InstanceFilter};
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
@@ -13,12 +15,66 @@ type Block = frame_system::mocking::MockBlock<Test>;
 frame_support::construct_runtime!(
 	pub enum Test
 	{
-		System: frame_system,
+		System: frame_system::{Pallet, Call, Config<T>, Storage, Event<T>},
 		SequencerGrouping: pallet_sequencer_grouping,
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Multisig: pallet_multisig::{Pallet, Call, Storage, Event<T>},
+		Proxy: pallet_proxy::{Pallet, Call, Storage, Event<T>},
+		Utility: pallet_utility::{Pallet, Call, Event},
 	}
 );
+
+#[derive(
+Copy,
+Clone,
+Eq,
+PartialEq,
+Ord,
+PartialOrd,
+Encode,
+Decode,
+RuntimeDebug,
+MaxEncodedLen,
+scale_info::TypeInfo,
+)]
+pub enum ProxyType {
+	Any,
+	JustTransfer,
+	JustUtility,
+}
+impl Default for ProxyType {
+	fn default() -> Self {
+		Self::Any
+	}
+}
+impl InstanceFilter<RuntimeCall> for ProxyType {
+	fn filter(&self, c: &RuntimeCall) -> bool {
+		match self {
+			ProxyType::Any => true,
+			ProxyType::JustTransfer => {
+				matches!(
+					c,
+					RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death { .. })
+				)
+			},
+			ProxyType::JustUtility => matches!(c, RuntimeCall::Utility { .. }),
+		}
+	}
+	fn is_superset(&self, o: &Self) -> bool {
+		self == &ProxyType::Any || self == o
+	}
+}
+pub struct BaseFilter;
+impl Contains<RuntimeCall> for BaseFilter {
+	fn contains(c: &RuntimeCall) -> bool {
+		match *c {
+			// Remark is used as a no-op call in the benchmarking
+			RuntimeCall::System(frame_system::Call::remark { .. }) => true,
+			RuntimeCall::System(_) => false,
+			_ => true,
+		}
+	}
+}
 
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
@@ -76,6 +132,28 @@ impl pallet_multisig::Config for Test {
 impl pallet_balances::Config for Test {
 	type ReserveIdentifier = [u8; 8];
 	type AccountStore = System;
+}
+
+impl pallet_utility::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type PalletsOrigin = OriginCaller;
+	type WeightInfo = ();
+}
+
+impl pallet_proxy::Config for Test {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type Currency = Balances;
+	type ProxyType = ProxyType;
+	type ProxyDepositBase = ConstU64<1>;
+	type ProxyDepositFactor = ConstU64<1>;
+	type MaxProxies = ConstU32<4>;
+	type WeightInfo = ();
+	type CallHasher = BlakeTwo256;
+	type MaxPending = ConstU32<2>;
+	type AnnouncementDepositBase = ConstU64<1>;
+	type AnnouncementDepositFactor = ConstU64<1>;
 }
 
 // Build genesis storage according to the mock runtime.

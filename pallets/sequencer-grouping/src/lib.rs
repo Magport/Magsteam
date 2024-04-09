@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use sp_runtime::traits::{Hash, StaticLookup};
 pub use pallet::*;
 
 #[cfg(test)]
@@ -13,6 +14,9 @@ mod benchmarking;
 pub mod weights;
 pub use weights::*;
 
+type AccountIdLookupOf<T> = <<T as frame_system::Config>::Lookup as StaticLookup>::Source;
+type CallHashOf<T> = <<T as pallet_proxy::Config>::CallHasher as Hash>::Output;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -24,6 +28,7 @@ pub mod pallet {
 	use sp_runtime::traits::Hash;
 	use sp_std::vec::Vec;
 	use pallet_multisig as multisig;
+	use pallet_proxy as proxy;
 
 	pub type RoundIndex = u32;
 
@@ -32,7 +37,7 @@ pub mod pallet {
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config + pallet_multisig::Config {
+	pub trait Config: frame_system::Config + pallet_multisig::Config + pallet_proxy::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
@@ -114,6 +119,7 @@ pub mod pallet {
 		GroupSizeTooLarge,
 		GroupNumberTooLarge,
 		AccountNotInGroup,
+		TooMany,
 	}
 
 	#[pallet::event]
@@ -199,6 +205,36 @@ pub mod pallet {
 				maybe_timepoint,
 				call,
 				max_weight
+			)
+		}
+
+		#[pallet::call_index(4)]
+		#[pallet::weight(Weight::default())]
+		pub fn add_proxy(
+			origin: OriginFor<T>,
+			delegate: AccountIdLookupOf<T>,
+			proxy_type: T::ProxyType,
+			delay: BlockNumberFor<T>,
+		) -> DispatchResult {
+			proxy::Pallet::<T>::add_proxy(
+				origin,
+				delegate,
+				proxy_type,
+				delay
+			)
+		}
+
+		#[pallet::call_index(5)]
+		#[pallet::weight(Weight::default())]
+		pub fn announce(
+			origin: OriginFor<T>,
+			real: AccountIdLookupOf<T>,
+			call_hash: CallHashOf<T>,
+		) -> DispatchResult {
+			proxy::Pallet::<T>::announce(
+				origin,
+				real,
+				call_hash
 			)
 		}
 	}

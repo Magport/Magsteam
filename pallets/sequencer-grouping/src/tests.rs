@@ -9,6 +9,9 @@ use parity_scale_codec::Encode;
 use pallet_balances::Call as BalancesCall;
 use sp_io::hashing::blake2_256;
 use pallet_multisig::Timepoint;
+use pallet_proxy::Announcements;
+use pallet_proxy::{Error as ProxyError, Event as ProxyEvent};
+use sp_std::vec;
 
 #[test]
 fn it_works_for_set_group_metric() {
@@ -200,5 +203,37 @@ fn multisig_2_of_3_works() {
 			call_weight
 		));
 		assert_eq!(Balances::free_balance(6), 15);
+	});
+}
+
+#[test]
+fn announcement_works() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(SequencerGrouping::add_proxy(RuntimeOrigin::signed(1), 3, ProxyType::Any, 1));
+		System::assert_last_event(
+			ProxyEvent::ProxyAdded {
+				delegator: 1,
+				delegatee: 3,
+				proxy_type: ProxyType::Any,
+				delay: 1,
+			}
+				.into(),
+		);
+		assert_ok!(SequencerGrouping::add_proxy(RuntimeOrigin::signed(2), 3, ProxyType::Any, 1));
+		assert_eq!(Balances::reserved_balance(1), 2);
+		assert_eq!(Balances::reserved_balance(2), 2);
+
+		assert_ok!(SequencerGrouping::announce(RuntimeOrigin::signed(3), 1, [1; 32].into()));
+		let announcements = Announcements::<Test>::get(3);
+		assert_eq!(Balances::reserved_balance(3), announcements.1);
+		assert_ok!(SequencerGrouping::announce(RuntimeOrigin::signed(3), 2, [2; 32].into()));
+		let announcements = Announcements::<Test>::get(3);
+		assert_eq!(Balances::reserved_balance(3), announcements.1);
+
+		assert_noop!(
+					SequencerGrouping::announce(RuntimeOrigin::signed(3), 2, [3; 32].into()),
+					ProxyError::<Test>::TooMany
+				);
+
 	});
 }

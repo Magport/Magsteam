@@ -19,6 +19,8 @@ sp-runtime = { workspace = true, default-features = false }
 sp-std = { workspace = true, default-features = false }
 sp-core = { workspace = true, default-features = false }
 pallet-multisig = { version = "25.0.0", default-features = false }
+pallet-proxy = { version = "25.0.0", default-features = false }
+pallet-utility = { version = "25.0.0", default-features = false }
 
 [dev-dependencies]
 pallet-balances = { workspace = true, default-features = false, features = [ "insecure_zero_ed", "std" ] }
@@ -33,6 +35,7 @@ std = [
     "frame-support/std",
     "frame-system/std",
     "pallet-multisig/std",
+    "pallet-proxy/std",
     "parity-scale-codec/std",
     "scale-info/std",
     "sp-runtime/std",
