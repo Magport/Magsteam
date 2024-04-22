@@ -26,8 +26,11 @@ scale-info = { workspace = true, default-features = false, features = [
 smallvec = { workspace = true }
 
 # Local
-pallet-parachain-template = { workspace = true, default-features = false }
+pallet-sequencer-staking = { workspace = true, default-features = false }
 runtime-common = { workspace = true, default-features = false }
+pallet-container = { workspace = true , default-features = false }
+pallet-sequencer-grouping = { workspace = true, default-features = false }
+primitives-container = { workspace = true , default-features = false }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = false, optional = true }
@@ -111,7 +114,8 @@ std = [
   "pallet-balances/std",
   "pallet-collective/std",
   "pallet-collator-selection/std",
-  "pallet-parachain-template/std",
+  "pallet-sequencer-staking/std",
+  "pallet-sequencer-grouping/std",
   "pallet-session/std",
   "pallet-sudo/std",
   "pallet-timestamp/std",
@@ -137,6 +141,8 @@ std = [
   "xcm-executor/std",
   "xcm/std",
   "substrate-wasm-builder",
+  "primitives-container/std",
+  "pallet-container/std",
 ]
 
 runtime-benchmarks = [
@@ -150,7 +156,8 @@ runtime-benchmarks = [
   "pallet-balances/runtime-benchmarks",
   "pallet-collator-selection/runtime-benchmarks",
   "pallet-collective/runtime-benchmarks",
-  "pallet-parachain-template/runtime-benchmarks",
+  "pallet-sequencer-staking/runtime-benchmarks",
+  "pallet-sequencer-grouping/runtime-benchmarks",
   "pallet-timestamp/runtime-benchmarks",
   "pallet-utility/runtime-benchmarks",
   "pallet-xcm/runtime-benchmarks",
@@ -158,6 +165,7 @@ runtime-benchmarks = [
   "xcm-builder/runtime-benchmarks",
   "cumulus-pallet-session-benchmarking/runtime-benchmarks",
   "cumulus-pallet-xcmp-queue/runtime-benchmarks",
+  "pallet-container/runtime-benchmarks",
 ]
 
 try-runtime = [
@@ -175,7 +183,8 @@ try-runtime = [
   "pallet-balances/try-runtime",
   "pallet-collator-selection/try-runtime",
   "pallet-collective/try-runtime",
-  "pallet-parachain-template/try-runtime",
+  "pallet-sequencer-staking/try-runtime",
+  "pallet-sequencer-grouping/try-runtime",
   "pallet-session/try-runtime",
   "pallet-sudo/try-runtime",
   "pallet-timestamp/try-runtime",
