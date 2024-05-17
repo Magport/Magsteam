@@ -40,7 +40,7 @@ sp-io = { workspace = true, default-features = false }
 sp-runtime = { workspace = true, default-features = false }
 popsicle-runtime = { workspace = true  }
 similar-asserts = { workspace = true }
-
+rand = { workspace = true }
 
 [features]
 default = ["std"]

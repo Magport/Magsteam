@@ -1,8 +1,11 @@
+use std::marker::PhantomData;
 use crate as pallet_sequencer_grouping;
+use crate::Config;
 use frame_support::{derive_impl, parameter_types, traits::Everything};
+use frame_system::pallet_prelude::BlockNumberFor;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
-	traits::{BlakeTwo256, IdentityLookup},
+	traits::{BlakeTwo256, IdentityLookup, Hash},
 	BuildStorage,
 };
 
@@ -49,12 +52,29 @@ impl frame_system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
-// impl pallet_insecure_randomness_collective_flip::Config for Test {}
+// Randomness trait
+pub struct TestRandomness<T> {
+	_marker: PhantomData<T>,
+}
+impl<T: Config> frame_support::traits::Randomness<T::Hash, BlockNumberFor<T>>
+for TestRandomness<T>
+{
+	fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
+		use rand::{rngs::OsRng, RngCore};
+		let mut digest: Vec<_> = [0u8; 32].into();
+		OsRng.fill_bytes(&mut digest);
+		digest.extend_from_slice(subject);
+		let randomness = T::Hashing::hash(&digest);
+		// NOTE: Test randomness is always "fresh" assuming block_number is > DrawingFreezeout
+		let block_number = 0u32.into();
+		(randomness, block_number)
+	}
+}
 
 impl pallet_sequencer_grouping::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = ();
-	type Randomness = pallet_sequencer_grouping::SimpleRandomness<Self>;
+	type RandomnessSource = TestRandomness<Test>;
 	type MaxGroupSize = ConstU32<5u32>;
 	type MaxGroupNumber = ConstU32<10u32>;
 }

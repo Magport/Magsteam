@@ -97,20 +97,19 @@ fn trigger_group_works() {
 #[test]
 fn account_in_group_works() {
 	new_test_ext().execute_with(|| {
-		System::set_block_number(10);
-		let parent_hash = H256::from_low_u64_be(12345);
-		frame_system::Pallet::<Test>::set_parent_hash(parent_hash);
-
 		assert_ok!(SequencerGrouping::set_group_metric(RuntimeOrigin::root(), 2, 3));
 		assert_ok!(SequencerGrouping::trigger_group(vec![1, 2, 3, 4, 5, 6], 1, 1));
 		println!("Group Members: {:?}", GroupMembers::<Test>::get());
 
-		assert_eq!(SequencerGrouping::account_in_group(1), Ok(0));
-		assert_eq!(SequencerGrouping::account_in_group(2), Ok(2));
-		assert_eq!(SequencerGrouping::account_in_group(3), Ok(2));
-		assert_eq!(SequencerGrouping::account_in_group(4), Ok(1));
-		assert_eq!(SequencerGrouping::account_in_group(5), Ok(1));
-		assert_eq!(SequencerGrouping::account_in_group(6), Ok(0));
+		let mut all_members = Vec::new();
+		for group in GroupMembers::<Test>::get().iter() {
+			assert_eq!(group.len(), 2);
+			for member in group {
+				assert!(!all_members.contains(member)); // Ensure no duplicate members in all groups
+				all_members.push(*member);
+			}
+		}
+		assert_eq!(all_members.len(), 6);
 	});
 }
 

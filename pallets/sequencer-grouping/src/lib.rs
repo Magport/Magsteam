@@ -21,7 +21,6 @@ pub mod pallet {
 		traits::{BuildGenesisConfig, Randomness},
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::Hash;
 	use sp_std::vec::Vec;
 
 	pub type RoundIndex = u32;
@@ -35,7 +34,7 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
-		type Randomness: Randomness<Self::Hash, BlockNumberFor<Self>>;
+		type RandomnessSource: Randomness<Self::Hash, BlockNumberFor<Self>>;
 
 		/// Maximum size of each sequencer group
 		#[pallet::constant]
@@ -164,27 +163,11 @@ pub mod pallet {
 		}
 	}
 
-	pub struct SimpleRandomness<T>(PhantomData<T>);
-
-	impl<T: Config> Randomness<T::Hash, BlockNumberFor<T>> for SimpleRandomness<T> {
-		fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
-			let hash = T::Hashing::hash(subject);
-			let current_block = frame_system::Pallet::<T>::block_number();
-			(hash, current_block)
-		}
-
-		fn random_seed() -> (T::Hash, BlockNumberFor<T>) {
-			Self::random(b"seed")
-		}
-	}
-
 	impl<T: Config> Pallet<T> {
 		pub fn shuffle_accounts(mut accounts: Vec<T::AccountId>) -> Vec<T::AccountId> {
-			// let random_seed = Self::get_and_increment_nonce();
-			let random_seed = frame_system::Pallet::<T>::parent_hash().encode();
-			// let random_value = T::Randomness::random(&random_seed);
-			// let random_value = <u64>::decode(&mut random_value.0.as_ref()).unwrap_or(0);
-			let random_value = random_seed[0];
+			let random_seed = b"shuffle_sequencers";
+			let random_value = T::RandomnessSource::random(random_seed);
+			let random_value = <u64>::decode(&mut random_value.0.as_ref()).unwrap_or(0);
 			for i in (1..accounts.len()).rev() {
 				let j: usize = (random_value as usize) % (i + 1);
 				accounts.swap(i, j);

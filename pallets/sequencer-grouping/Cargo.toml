@@ -19,11 +19,15 @@ sp-runtime = { workspace = true, default-features = false }
 sp-std = { workspace = true, default-features = false }
 sp-core = { workspace = true, default-features = false }
 
+# Local
+pallet-randomness = { workspace = true, default-features = false }
+
 [dev-dependencies]
 pallet-balances = { workspace = true, default-features = false, features = [ "insecure_zero_ed", "std" ] }
 sp-core = { workspace = true, default-features = false, features = [ "std" ] }
 sp-io = { workspace = true, default-features = false, features = [ "std" ] }
 sp-runtime = { workspace = true, default-features = false }
+rand = { workspace = true }
 
 [features]
 default = [ "std" ]
@@ -35,6 +39,7 @@ std = [
     "scale-info/std",
     "sp-runtime/std",
     "sp-std/std",
+    "pallet-randomness/std",
 ]
 runtime-benchmarks = [ "frame-benchmarking/runtime-benchmarks" ]
 try-runtime = [ "frame-support/try-runtime" ]

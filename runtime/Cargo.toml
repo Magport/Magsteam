@@ -87,6 +87,7 @@ parachains-common = { workspace = true, default-features = false }
 parachain-info = { workspace = true, default-features = false }
 
 # Local
+pallet-randomness = { workspace = true, default-features = false }
 pallet-sequencer-grouping ={ workspace = true, default-features = false }
 pallet-sequencer-staking ={ workspace = true, default-features = false }
 pallet-container = { workspace = true , default-features = false }
@@ -146,6 +147,7 @@ std = [
 	"xcm-builder/std",
 	"xcm-executor/std",
 	"xcm/std",
+	"pallet-randomness/std",
 	"pallet-sequencer-grouping/std",
 	"pallet-sequencer-staking/std",
 	"pallet-container/std",
@@ -177,6 +179,7 @@ runtime-benchmarks = [
 	"sp-runtime/runtime-benchmarks",
 	"xcm-builder/runtime-benchmarks",
 	"xcm-executor/runtime-benchmarks",
+	"pallet-randomness/runtime-benchmarks",
 	"pallet-sequencer-grouping/runtime-benchmarks",
 	"pallet-sequencer-staking/runtime-benchmarks",
 	"pallet-container/runtime-benchmarks"
@@ -206,6 +209,7 @@ try-runtime = [
 	"parachain-info/try-runtime",
 	"polkadot-runtime-common/try-runtime",
 	"sp-runtime/try-runtime",
+	"pallet-randomness/try-runtime",
 	"pallet-sequencer-grouping/try-runtime",
 	"pallet-sequencer-staking/try-runtime",
 ]
