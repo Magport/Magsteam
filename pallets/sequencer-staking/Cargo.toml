@@ -65,6 +65,7 @@ std = [
 	"pallet-balances/std",
 	"pallet-assets/std",
 	"pallet-sequencer-grouping/std",
+	"popsicle-runtime/std",
 ]
 try-runtime = [
 	"frame-support/try-runtime",
