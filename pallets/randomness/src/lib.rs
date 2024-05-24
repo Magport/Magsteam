@@ -95,6 +95,7 @@ pub mod pallet {
             ensure_none(origin)?;
             let last_relay_epoch_index = <RelayEpoch<T>>::get();
             let relay_epoch_index = T::BabeDataGetter::get_epoch_index();
+            log::info!("last relay epoch index: {:?}, current relay epoch index: {:?}", last_relay_epoch_index, relay_epoch_index);
             if relay_epoch_index > last_relay_epoch_index {
                 // NOTE: Whether n = 1 or 2 depends on the trait implementation of BabeDataGetter
                 let babe_n_epochs_ago_this_block = RequestType::BabeEpoch(relay_epoch_index);
@@ -104,6 +105,8 @@ pub mod pallet {
                         randomness: Some(randomness),
                     };
                     <RandomnessResults<T>>::insert(babe_n_epochs_ago_this_block, result);
+                    log::info!("Successfully filled Babe randomness results for epoch {:?}", relay_epoch_index);
+                    log::info!("Randomness: {:?}", randomness);
                 } else {
                     log::warn!(
                         "Failed to fill BABE epoch randomness results \
