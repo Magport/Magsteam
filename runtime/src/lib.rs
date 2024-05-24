@@ -17,7 +17,7 @@ use frame_system::EnsureSigned;
 use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata, Get};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
@@ -49,7 +49,8 @@ use frame_system::{
 	EnsureRoot,
 };
 pub use pallet_container;
-use pallet_sequencer_grouping::SimpleRandomness;
+use pallet_randomness;
+use pallet_sequencer_grouping;
 use pallet_sequencer_staking::WeightInfo;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
@@ -571,12 +572,65 @@ impl pallet_sequencer_staking::Config for Runtime {
 	type WeightInfo = ();
 }
 
+/// Only callable after `set_validation_data` is called which forms this proof the same way
+fn relay_chain_state_proof() -> cumulus_pallet_parachain_system::RelayChainStateProof {
+	let relay_storage_root = ParachainSystem::validation_data()
+		.expect("set in `set_validation_data`")
+		.relay_parent_storage_root;
+	let relay_chain_state =
+		ParachainSystem::relay_state_proof().expect("set in `set_validation_data`");
+	cumulus_pallet_parachain_system::RelayChainStateProof::new(
+		ParachainInfo::get(),
+		relay_storage_root,
+		relay_chain_state,
+	)
+		.expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
+}
+
+pub struct BabeDataGetter;
+impl pallet_randomness::GetBabeData<u64, Option<Hash>> for BabeDataGetter {
+	// Tolerate panic here because only ever called in inherent (so can be omitted)
+	fn get_epoch_index() -> u64 {
+		if cfg!(feature = "runtime-benchmarks") {
+			// storage reads as per actual reads
+			let _relay_storage_root = ParachainSystem::validation_data();
+			let _relay_chain_state = ParachainSystem::relay_state_proof();
+			const BENCHMARKING_NEW_EPOCH: u64 = 10u64;
+			return BENCHMARKING_NEW_EPOCH;
+		}
+		relay_chain_state_proof()
+			.read_optional_entry(cumulus_primitives_core::relay_chain::well_known_keys::EPOCH_INDEX)
+			.ok()
+			.flatten()
+			.expect("expected to be able to read epoch index from relay chain state proof")
+	}
+	fn get_epoch_randomness() -> Option<Hash> {
+		if cfg!(feature = "runtime-benchmarks") {
+			// storage reads as per actual reads
+			let _relay_storage_root = ParachainSystem::validation_data();
+			let _relay_chain_state = ParachainSystem::relay_state_proof();
+			let benchmarking_babe_output = Hash::default();
+			return Some(benchmarking_babe_output);
+		}
+		relay_chain_state_proof()
+			.read_optional_entry(
+				cumulus_primitives_core::relay_chain::well_known_keys::ONE_EPOCH_AGO_RANDOMNESS,
+			)
+			.ok()
+			.flatten()
+	}
+}
+impl pallet_randomness::Config for Runtime {
+	type BabeDataGetter = BabeDataGetter;
+	type WeightInfo = pallet_randomness::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_sequencer_grouping::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_sequencer_grouping::weights::SubstrateWeight<Runtime>;
 	type MaxGroupSize = ConstU32<100>;
 	type MaxGroupNumber = ConstU32<100>;
-	type Randomness = SimpleRandomness<Self>;
+	type RandomnessSource = pallet_randomness::Pallet<Runtime>;
 }
 
 parameter_types! {
@@ -633,6 +687,8 @@ construct_runtime!(
 		// Popsicle pallets.
 		SequencerStaking: pallet_sequencer_staking = 40,
 		SequencerGroupingPallet: pallet_sequencer_grouping = 41,
+		RandomnessSource: pallet_randomness::{Pallet, Call, Storage, Inherent} = 42,
+
 		ContainerPallet:pallet_container = 51,
 	}
 );
