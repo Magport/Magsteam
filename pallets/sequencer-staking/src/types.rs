@@ -222,8 +222,9 @@ impl<AccountId, Balance: Copy + Ord + sp_std::ops::AddAssign + Zero + Saturating
 	/// Return the capacity status for bottom delegations
 	pub fn bottom_capacity<T: Config>(&self) -> CapacityStatus {
 		match &self.delegations {
-			x if x.len() as u32 >= T::MaxBottomDelegationsPerCandidate::get() =>
-				CapacityStatus::Full,
+			x if x.len() as u32 >= T::MaxBottomDelegationsPerCandidate::get() => {
+				CapacityStatus::Full
+			},
 			x if x.is_empty() => CapacityStatus::Empty,
 			_ => CapacityStatus::Partial,
 		}
@@ -579,8 +580,8 @@ impl<
 			.expect("CandidateInfo existence => BottomDelegations existence");
 		// if bottom is full, kick the lowest bottom (which is expected to be lower than input
 		// as per check)
-		let increase_delegation_count = if bottom_delegations.delegations.len() as u32 ==
-			T::MaxBottomDelegationsPerCandidate::get()
+		let increase_delegation_count = if bottom_delegations.delegations.len() as u32
+			== T::MaxBottomDelegationsPerCandidate::get()
 		{
 			let lowest_bottom_to_be_kicked = bottom_delegations
 				.delegations
@@ -938,8 +939,8 @@ impl<
 		let bond_after_less_than_highest_bottom =
 			bond.saturating_sub(less).into() < self.highest_bottom_delegation_amount;
 		// The top delegations is full and the bottom delegations has at least one delegation
-		let full_top_and_nonempty_bottom = matches!(self.top_capacity, CapacityStatus::Full) &&
-			!matches!(self.bottom_capacity, CapacityStatus::Empty);
+		let full_top_and_nonempty_bottom = matches!(self.top_capacity, CapacityStatus::Full)
+			&& !matches!(self.bottom_capacity, CapacityStatus::Empty);
 		let mut top_delegations =
 			<TopDelegations<T>>::get(candidate).ok_or(Error::<T>::CandidateDNE)?;
 		let in_top_after = if bond_after_less_than_highest_bottom && full_top_and_nonempty_bottom {
