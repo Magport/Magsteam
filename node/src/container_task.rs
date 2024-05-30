@@ -241,21 +241,22 @@ async fn start_docker_container(
 	Ok(())
 }
 
-// Redirect docker logs to a file
-// docker logs   {container_name}> {log_file} 2>&1
-// docker logs   {container_name}>& {log_file}
+// Redirect docker logs to a file.
+// It will run as a background process, so you need to save the instance and kill it when switching.
+// docker logs   -f -t --details {container_name}
+
 async fn redirect_docker_container_log(
 	container_name: &str,
-	in_args: Vec<&str>,
 	log_file: File,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-	let docker_cmd = format!("logs  {}", container_name);
-	let mut args: Vec<&str> = docker_cmd.split(' ').into_iter().map(|arg| arg).collect();
-	args.extend(in_args);
-	log::info!("=======================args:{:?}", args);
-	let mut instance = Command::new("docker").args(args).stdout(Stdio::from(log_file)).spawn()?;
-	instance.wait()?;
-	Ok(())
+) -> Result<Child, Box<dyn Error + Send + Sync>> {
+	let docker_cmd = format!("logs -f -t --details {}", container_name);
+	let args: Vec<&str> = docker_cmd.split(' ').into_iter().map(|arg| arg).collect();
+	let instance = Command::new("docker")
+		.args(args)
+		.stdin(Stdio::piped())
+		.stdout(Stdio::from(log_file))
+		.spawn()?;
+	Ok(instance)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -288,6 +289,9 @@ struct RunningApp {
 	instance2_docker: bool,
 	instance1_docker_name: Option<Vec<u8>>,
 	instance2_docker_name: Option<Vec<u8>>,
+	// TODO:need self test.
+	// instance1_docker_log: Option<Child>,
+	// instance2_docker_log: Option<Child>,
 	cur_ins: InstanceIndex,
 }
 
@@ -650,6 +654,7 @@ async fn app_run_task(
 			let kill_result = remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 			log::info!("kill old docker instance:{:?}", kill_result);
 		}
+	// TODO:kill old docker log
 	} else {
 		if let Some(ref mut old_instance) = old_instance {
 			old_instance.kill()?;
@@ -675,6 +680,8 @@ async fn app_run_task(
 		)
 		.await;
 		log::info!("start docker container :{:?}", start_result);
+	// TODO:redirect docker log to file,nee self test
+	// redirect_docker_container_log(std::str::from_utf8(&app_info.file_name)?, outputs).await;
 	} else {
 		let download_path = format!(
 			"{}/sdk/{}",
@@ -700,6 +707,7 @@ async fn app_run_task(
 						remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 					log::info!("kill docker instance2:{:?}", kill_result);
 				}
+				// TODO:kill old docker log instance
 				app.instance2_docker_name = None;
 				app.instance2_docker = false;
 			} else {
@@ -721,6 +729,7 @@ async fn app_run_task(
 						remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 					log::info!("kill docker instance1:{:?}", kill_result);
 				}
+				// TODO:kill old docker log instance
 				app.instance1_docker_name = None;
 				app.instance1_docker = false;
 			} else {
