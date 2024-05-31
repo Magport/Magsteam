@@ -289,9 +289,8 @@ struct RunningApp {
 	instance2_docker: bool,
 	instance1_docker_name: Option<Vec<u8>>,
 	instance2_docker_name: Option<Vec<u8>>,
-	// TODO:need self test.
-	// instance1_docker_log: Option<Child>,
-	// instance2_docker_log: Option<Child>,
+	instance1_docker_log: Option<Child>,
+	instance2_docker_log: Option<Child>,
 	cur_ins: InstanceIndex,
 }
 
@@ -641,10 +640,26 @@ async fn app_run_task(
 		if app.cur_ins == InstanceIndex::Instance1 {
 			let is_docker_instance = app.instance1_docker;
 			let top_docker_name = app.instance1_docker_name.clone();
+			if is_docker_instance && top_docker_name.is_some() {
+				//kill old docker log instance
+				if let Some(ref mut log_instance) = app.instance1_docker_log {
+					log_instance.kill()?;
+					let kill_result = log_instance.wait()?;
+					log::info!("kill old docker log instance:{:?}:{:?}", 1, kill_result);
+				}
+			}
 			(&mut app.instance1, is_docker_instance, top_docker_name, 1)
 		} else {
 			let is_docker_instance = app.instance2_docker;
 			let top_docker_name = app.instance2_docker_name.clone();
+			if is_docker_instance && top_docker_name.is_some() {
+				//kill old docker log instance
+				if let Some(ref mut log_instance) = app.instance2_docker_log {
+					log_instance.kill()?;
+					let kill_result = log_instance.wait()?;
+					log::info!("kill old docker log instance:{:?}:{:?}", 2, kill_result);
+				}
+			}
 			(&mut app.instance2, is_docker_instance, top_docker_name, 2)
 		};
 	// stop old instance
@@ -654,20 +669,16 @@ async fn app_run_task(
 			let kill_result = remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 			log::info!("kill old docker instance:{:?}", kill_result);
 		}
-	// TODO:kill old docker log
 	} else {
 		if let Some(ref mut old_instance) = old_instance {
 			old_instance.kill()?;
 			let kill_result = old_instance.wait()?;
 			log::info!("kill old instance:{:?}:{:?}", cur_ins, kill_result);
-			match kill_result.code() {
-				Some(code) => log::info!("Exited with status code: {code}"),
-				None => log::info!("Process terminated by signal"),
-			}
 		}
 	}
 	// start new instance
 	let mut instance: Option<Child> = None;
+	let mut docker_log_instance: Option<Child> = None;
 	if run_as_docker {
 		let image_name = app_info.docker_image.ok_or("docker image not exist")?;
 		let docker_image = std::str::from_utf8(&image_name)?;
@@ -680,8 +691,11 @@ async fn app_run_task(
 		)
 		.await;
 		log::info!("start docker container :{:?}", start_result);
-	// TODO:redirect docker log to file,nee self test
-	// redirect_docker_container_log(std::str::from_utf8(&app_info.file_name)?, outputs).await;
+		// redirect docker log to file
+		docker_log_instance = Some(
+			redirect_docker_container_log(std::str::from_utf8(&app_info.file_name)?, outputs)
+				.await?,
+		);
 	} else {
 		let download_path = format!(
 			"{}/sdk/{}",
@@ -703,13 +717,19 @@ async fn app_run_task(
 			if app.instance2_docker {
 				let docker_name_op = app.instance2_docker_name.clone();
 				if let Some(docker_name) = docker_name_op {
+					//kill old docker log instance first
+					if let Some(ref mut log_instance) = app.instance2_docker_log {
+						log_instance.kill()?;
+						let kill_result = log_instance.wait()?;
+						log::info!("kill old docker log instance2:{:?}", kill_result);
+					}
 					let kill_result =
 						remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 					log::info!("kill docker instance2:{:?}", kill_result);
 				}
-				// TODO:kill old docker log instance
 				app.instance2_docker_name = None;
 				app.instance2_docker = false;
+				app.instance2_docker_log = None;
 			} else {
 				let other_instance = &mut app.instance2;
 				if let Some(ref mut other_instance) = other_instance {
@@ -725,6 +745,12 @@ async fn app_run_task(
 			if app.instance1_docker {
 				let docker_name_op = app.instance1_docker_name.clone();
 				if let Some(docker_name) = docker_name_op {
+					//kill old docker log instance first
+					if let Some(ref mut log_instance) = app.instance1_docker_log {
+						log_instance.kill()?;
+						let kill_result = log_instance.wait()?;
+						log::info!("kill old docker log instance1:{:?}", kill_result);
+					}
 					let kill_result =
 						remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 					log::info!("kill docker instance1:{:?}", kill_result);
@@ -732,6 +758,7 @@ async fn app_run_task(
 				// TODO:kill old docker log instance
 				app.instance1_docker_name = None;
 				app.instance1_docker = false;
+				app.instance1_docker_log = None;
 			} else {
 				let other_instance = &mut app.instance1;
 				if let Some(ref mut other_instance) = other_instance {
@@ -750,6 +777,7 @@ async fn app_run_task(
 			if run_as_docker {
 				app.instance1_docker = true;
 				app.instance1_docker_name = Some(app_info.file_name);
+				app.instance1_docker_log = docker_log_instance;
 			} else {
 				app.instance1_docker = false;
 				app.instance1_docker_name = None;
@@ -759,6 +787,7 @@ async fn app_run_task(
 			if run_as_docker {
 				app.instance2_docker = true;
 				app.instance2_docker_name = Some(app_info.file_name);
+				app.instance2_docker_log = docker_log_instance;
 			} else {
 				app.instance2_docker = false;
 				app.instance2_docker_name = None;
@@ -975,9 +1004,9 @@ where
 		let mut app = running_app.lock().await;
 		let run_status = &app.running;
 		let app_hash = app.app_hash;
+		log::info!("run:{:?}", app);
 		if let Some(app_info) = app.app_info.clone() {
 			if *run_status == RunStatus::Downloaded {
-				log::info!("run:{:?}", app);
 				let run_args_key =
 					format!("{}:{}", RUN_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
 
@@ -1080,6 +1109,8 @@ async fn relay_chain_notification<P, R, Block, TBackend>(
 		instance2_docker: false,
 		instance1_docker_name: None,
 		instance2_docker_name: None,
+		instance1_docker_log: None,
+		instance2_docker_log: None,
 		cur_ins: InstanceIndex::Instance1,
 	}));
 	let runing_processor = Arc::new(Mutex::new(RunningProcessor { processors: HashMap::new() }));
