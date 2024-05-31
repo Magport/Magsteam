@@ -91,6 +91,7 @@ pallet-sequencer-grouping ={ workspace = true, default-features = false }
 pallet-sequencer-staking ={ workspace = true, default-features = false }
 pallet-container = { workspace = true , default-features = false }
 primitives-container = { workspace = true , default-features = false }
+pallet-btc-bridge = { workspace = true , default-features = false }
 
 [features]
 default = ["std"]
@@ -149,7 +150,8 @@ std = [
 	"pallet-sequencer-grouping/std",
 	"pallet-sequencer-staking/std",
 	"pallet-container/std",
-	"primitives-container/std"
+	"primitives-container/std",
+	"pallet-btc-bridge/std"
 ]
 
 runtime-benchmarks = [

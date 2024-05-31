@@ -599,6 +599,12 @@ impl pallet_container::Config for Runtime {
 	type MaxArgLength = MaxArgLength;
 }
 
+impl pallet_btc_bridge::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_btc_bridge::weights::SubstrateWeight<Runtime>;
+	type BtcAssetId = ConstU32<1>;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime {
@@ -636,6 +642,9 @@ construct_runtime!(
 		SequencerStaking: pallet_sequencer_staking = 40,
 		SequencerGroupingPallet: pallet_sequencer_grouping = 41,
 		ContainerPallet:pallet_container = 51,
+		
+		// Bridge
+		BtcBridge:pallet_btc_bridge = 60,
 	}
 );
 

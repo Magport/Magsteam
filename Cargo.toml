@@ -174,3 +174,4 @@ pallet-sequencer-grouping ={ path = "./pallets/sequencer-grouping", default-feat
 pallet-sequencer-staking ={ path = "./pallets/sequencer-staking", default-features = false }
 pallet-container = { path = "pallets/container", default-features = false }
 primitives-container = {  path="./primitives/container", default-features = false }
+pallet-btc-bridge = { path = "pallets/btc-bridge", default-features = false }
