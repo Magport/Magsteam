@@ -158,22 +158,38 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
     
 async fn mu_sig_sign(message_hash: &H256, sk1: SecretKey, sk2: SecretKey) -> Signature {
-     
-        // 1. 公钥聚合
-     
-        // 2. 生成 nonce 承诺
-     
-        // 3. 交换 nonce 承诺
-     
-        // 验证收到的 nonce 承诺
-     
-        // 4. 计算部分签名
-     
-        // 5. 聚合部分签名
+        let secp = Secp256k1::new();
+        //let message_hash = Message::from_slice(message).unwrap();
     
-        // 6. 生成最终签名
-  
-}
+        // 1. public key aggregation
+        let combined_pk = XOnlyPublicKey::from_pubkey(&secp, &sk1.public_key()).combine(&XOnlyPublicKey::from_pubkey(&secp, &sk2.public_key()));
+    
+        // 2. Generating nonce commitments
+        let (nonce_commitment1, nonce1, _) = secp.generate_nonce_commitment(&sk1, &combined_pk);
+        let (nonce_commitment2, nonce2, _) = secp.generate_nonce_commitment(&sk2, &combined_pk);
+    
+        // 3. Exchange of nonce commitments
+        let (nonce_sender, nonce_receiver) = channel(1);
+        task::spawn(async move {
+            nonce_sender.send((nonce_commitment2, nonce2)).await.unwrap();
+        });
+        let (received_nonce_commitment, received_nonce) = nonce_receiver.recv().await.unwrap();
+    
+        // Validating received nonce commitments
+        assert_eq!(nonce_commitment1, received_nonce_commitment);
+    
+        // 4. Calculation of partial signatures
+        let part1 = secp.partial_sign(&sk1, &message_hash, &nonce1);
+        let part2 = secp.partial_sign(&sk2, &message_hash, &received_nonce);
+    
+        // 5. polymerization of partial signatures
+        let mut final_signature = secp.aggregate_partials(&[part1, part2]).unwrap();
+    
+        // 6. Generate final signature
+        let finalized_signature = secp.finalize_aggregate(&final_signature, &combined_pk, &nonce1, &nonce2).unwrap();
+    
+        finalized_signature
+    }
 
 
 
