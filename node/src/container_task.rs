@@ -175,6 +175,17 @@ async fn need_download(
 	}
 }
 
+async fn need_pull_docker_image(
+	docker_image: &str,
+	file_hash: H256,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+	let exist = check_docker_image_exist(docker_image).await?;
+	let mut need = false;
+	if exist {
+		need = check_docker_image_hash(docker_image, file_hash).await?;
+	}
+	Ok(need)
+}
 async fn check_docker_image_exist(
 	docker_image: &str,
 ) -> Result<bool, Box<dyn Error + Send + Sync>> {
@@ -199,12 +210,16 @@ async fn check_docker_image_exist(
 	Ok(result)
 }
 
-async fn download_docker_image(docker_image: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+async fn download_docker_image(
+	docker_image: &str,
+	file_hash: H256,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
 	let pull_cmd = format!("pull {}", docker_image);
 	let args: Vec<&str> = pull_cmd.split(' ').into_iter().map(|arg| arg).collect();
 	let mut instance = Command::new("docker").args(args).spawn()?;
 	instance.wait()?;
-	Ok(())
+	let result = check_docker_image_hash(docker_image, file_hash).await?;
+	Ok(result)
 }
 
 async fn remove_docker_container(container_name: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -239,6 +254,40 @@ async fn start_docker_container(
 	let mut instance = Command::new("docker").args(args).stdout(Stdio::from(log_file)).spawn()?;
 	instance.wait()?;
 	Ok(())
+}
+
+/// Verify that the hash of the docker image file is consistent.
+/// The shell command is:docker image ls {docker_image} --format "table {{.Digest}}"|grep sha256
+async fn check_docker_image_hash(
+	docker_image: &str,
+	app_hash: H256,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+	let ls_cmd = format!("image ls {} --format", docker_image);
+	let mut args: Vec<&str> = ls_cmd.split(' ').into_iter().map(|arg| arg).collect();
+	args.push("table {{.Digest}}");
+	let mut instance = Command::new("docker").stdout(Stdio::piped()).args(args).spawn()?;
+	let mut result = false;
+	if let Some(ls_output) = instance.stdout.take() {
+		let grep_cmd = Command::new("grep")
+			.arg("sha256")
+			.stdin(ls_output)
+			.stdout(Stdio::piped())
+			.spawn()?;
+
+		let grep_stdout = grep_cmd.wait_with_output()?;
+		instance.wait()?;
+		let sha256_hash = String::from_utf8(grep_stdout.stdout)?;
+		if sha256_hash.len() > 0 {
+			let hashs: Vec<&str> = sha256_hash.split(':').into_iter().map(|arg| arg).collect();
+			if hashs.len() > 0 {
+				let get_hash = H256::from_str(hashs[hashs.len() - 1])?;
+				if get_hash == app_hash {
+					result = true;
+				}
+			}
+		}
+	}
+	Ok(result)
 }
 
 // Redirect docker logs to a file.
@@ -324,14 +373,19 @@ async fn app_download_task(
 		log::info!("===========Download app from docker hub and run the application as a container=========");
 		if let Some(image) = app_info.clone().docker_image {
 			let docker_image = std::str::from_utf8(&image)?;
-			let mut exist_docker_image = check_docker_image_exist(docker_image).await?;
-			if !exist_docker_image {
-				download_docker_image(docker_image).await?;
-				exist_docker_image = check_docker_image_exist(docker_image).await?;
-			}
-			if exist_docker_image {
-				//Start docker container
-				start_flag = true;
+			let need_pull = need_pull_docker_image(docker_image, app_info.app_hash).await;
+			if let Ok(need_pull) = need_pull {
+				if need_pull {
+					let result = download_docker_image(docker_image, app_info.app_hash).await;
+					if result.is_ok() {
+						start_flag = true;
+					} else {
+						log::info!("pull docker image error:{:?}", result);
+					}
+				} else {
+					//Start docker container
+					start_flag = true;
+				}
 			}
 		}
 	} else {
@@ -516,14 +570,19 @@ async fn processor_task(
 		log::info!("===========Download app from docker hub and run the application as a container=========");
 		if let Some(image) = processor_info.clone().docker_image {
 			let docker_image = std::str::from_utf8(&image)?;
-			let mut exist_docker_image = check_docker_image_exist(docker_image).await?;
-			if !exist_docker_image {
-				download_docker_image(docker_image).await?;
-				exist_docker_image = check_docker_image_exist(docker_image).await?;
-			}
-			if exist_docker_image {
-				//Start docker container
-				start_flag = true;
+			let need_pull = need_pull_docker_image(docker_image, processor_info.app_hash).await;
+			if let Ok(need_pull) = need_pull {
+				if need_pull {
+					let result = download_docker_image(docker_image, processor_info.app_hash).await;
+					if result.is_ok() {
+						start_flag = true;
+					} else {
+						log::info!("pull docker image error:{:?}", result);
+					}
+				} else {
+					//Start docker container
+					start_flag = true;
+				}
 			}
 		}
 	} else {
@@ -763,7 +822,6 @@ async fn app_run_task(
 						remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 					log::info!("kill docker instance1:{:?}", kill_result);
 				}
-				// TODO:kill old docker log instance
 				app.instance1_docker_name = None;
 				app.instance1_docker = false;
 				app.instance1_docker_log = None;
