@@ -938,6 +938,7 @@ async fn handle_new_best_parachain_head<P, Block, TBackend>(
 	running_app: Arc<Mutex<RunningApp>>,
 	running_processor: Arc<Mutex<RunningProcessor>>,
 	backend: Arc<TBackend>,
+	ip_address: &str,
 ) -> Result<(), Box<dyn Error>>
 where
 	Block: BlockT,
@@ -961,12 +962,13 @@ where
 	let xx = keystore.sr25519_public_keys(sp_application_crypto::key_types::AURA)[0];
 
 	// Processor client process
-	let ip_address = get_local_info::get_pc_ipv4();
 
 	log::info!("ip_address:{:?}", ip_address);
 
 	let processor_infos: Vec<ProcessorDownloadInfo> =
-		parachain.runtime_api().processor_run(hash, xx.into())?;
+		parachain
+			.runtime_api()
+			.processor_run(hash, xx.into(), ip_address.as_bytes().to_vec())?;
 
 	log::info!("processor download info:{:?}", processor_infos);
 
@@ -1185,12 +1187,13 @@ async fn relay_chain_notification<P, R, Block, TBackend>(
 		cur_ins: InstanceIndex::Instance1,
 	}));
 	let runing_processor = Arc::new(Mutex::new(RunningProcessor { processors: HashMap::new() }));
+	let ip_address = public_ip::addr().await.expect("couldn't get an IP address").to_string();
 	loop {
 		select! {
 			h = new_best_heads.next() => {
 				match h {
 					Some((_height, head, _hash)) => {
-						let _ = handle_new_best_parachain_head(head, &*parachain,keystore.clone(), data_path.clone(), runing_app.clone(),runing_processor.clone(), backend.clone()).await;
+						let _ = handle_new_best_parachain_head(head, &*parachain,keystore.clone(), data_path.clone(), runing_app.clone(),runing_processor.clone(), backend.clone(), &ip_address).await;
 					},
 					None => {
 						return;

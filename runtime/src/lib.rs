@@ -812,8 +812,8 @@ impl_runtime_apis! {
 			ContainerPallet::should_run()
 		}
 
-		fn processor_run(author:AccountId32)->Vec<ProcessorDownloadInfo> {
-			ContainerPallet::processor_run(author)
+		fn processor_run(author:AccountId32, ip_address:Vec<u8>)->Vec<ProcessorDownloadInfo> {
+			ContainerPallet::processor_run(author, ip_address)
 		}
 	}
 

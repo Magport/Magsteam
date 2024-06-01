@@ -337,14 +337,23 @@ impl<T: Config> Pallet<T> {
 		<pallet_sequencer_grouping::Pallet<T>>::all_group_ids()
 	}
 
-	pub fn processor_run(author: T::AccountId) -> Vec<ProcessorDownloadInfo> {
-		let processors = <pallet_sequencer_grouping::Pallet<T>>::get_group_ids(author);
+	pub fn processor_run(author: T::AccountId, ip_address: Vec<u8>) -> Vec<ProcessorDownloadInfo> {
+		// let processors = <pallet_sequencer_grouping::Pallet<T>>::get_group_ids(author);
 		let mut download_infos: Vec<ProcessorDownloadInfo> = Vec::new();
 		if Self::get_groups().len() == 0 {
 			return download_infos;
 		}
 		let url = DefaultUrl::<T>::get().expect("Need set url");
 
+		let processor_info = <pallet_sequencer_grouping::Pallet<T>>::processor_info();
+		let processors = if let Some((_, _, group_ids)) = processor_info
+			.iter()
+			.find(|(acc, ip, _)| (*acc == author) && (ip.to_vec() == ip_address))
+		{
+			group_ids.clone().into_inner()
+		} else {
+			Vec::new()
+		};
 		for group_id in processors {
 			if let Some(app_id) = GroupAPPMap::<T>::get(group_id) {
 				let p_app_info = APPInfoMap::<T>::get(app_id);

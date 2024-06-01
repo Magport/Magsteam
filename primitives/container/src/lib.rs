@@ -39,6 +39,6 @@ sp_api::decl_runtime_apis! {
 		fn should_run()-> bool;
 		fn get_group_id(author:AuthorityId) ->u32;
 		fn get_groups()->Vec<u32>;
-		fn processor_run(author:AuthorityId)->Vec<ProcessorDownloadInfo>;
+		fn processor_run(author:AuthorityId, ip_address:Vec<u8>)->Vec<ProcessorDownloadInfo>;
 	}
 }
