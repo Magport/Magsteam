@@ -212,16 +212,17 @@ pub mod pallet {
 
 			let batch_app = *batch_client;
 
-			for app_id in 1..old_application_id {
-				let p_app_info = APPInfoMap::<T>::get(app_id);
-				if let Some(app_info) = p_app_info {
-					assert!(
-						(app_info.consensus_client.app_hash != consensus_app.app_hash) &&
-							(app_info.batch_client.app_hash != batch_app.app_hash),
-						"Client with the same hash exist!",
-					);
-				}
-			}
+			// we can allow same app when register app.
+			// for app_id in 1..old_application_id {
+			// 	let p_app_info = APPInfoMap::<T>::get(app_id);
+			// 	if let Some(app_info) = p_app_info {
+			// 		assert!(
+			// 			(app_info.consensus_client.app_hash != consensus_app.app_hash) &&
+			// 				(app_info.batch_client.app_hash != batch_app.app_hash),
+			// 			"Client with the same hash exist!",
+			// 		);
+			// 	}
+			// }
 			APPInfoMap::<T>::insert(
 				old_application_id,
 				APPInfo {
@@ -365,6 +366,7 @@ impl<T: Config> Pallet<T> {
 						.docker_image
 						.and_then(|docker_image| Some(docker_image.as_slice().to_vec()));
 					download_infos.push(ProcessorDownloadInfo {
+						app_id,
 						app_hash: batch_client.app_hash,
 						file_name: batch_client.file_name.into(),
 						size: batch_client.size,

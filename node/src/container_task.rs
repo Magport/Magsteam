@@ -13,7 +13,7 @@ use ring::digest::{Context, Digest, SHA256};
 use sc_client_api::UsageProvider;
 use sc_service::TaskManager;
 use sp_api::ProvideRuntimeApi;
-use sp_core::{hexdisplay::HexDisplay, offchain::OffchainStorage, H256};
+use sp_core::{offchain::OffchainStorage, H256};
 use sp_keystore::KeystorePtr;
 use sp_offchain::STORAGE_PREFIX;
 use sp_runtime::{
@@ -345,6 +345,7 @@ struct RunningApp {
 
 #[derive(Debug)]
 struct ProcessorInstance {
+	app_id: u32,
 	app_hash: H256,
 	running: RunStatus,
 	processor_info: Option<ProcessorDownloadInfo>,
@@ -355,7 +356,7 @@ struct ProcessorInstance {
 }
 #[derive(Debug)]
 struct RunningProcessor {
-	processors: HashMap<H256, ProcessorInstance>,
+	processors: HashMap<u32, ProcessorInstance>,
 }
 
 async fn app_download_task(
@@ -540,7 +541,7 @@ async fn processor_run_task(
 	}
 	let mut running_processors = running_processor.lock().await;
 	let processor_instances = &mut running_processors.processors;
-	processor_instances.entry(processor_info.app_hash).and_modify(|app| {
+	processor_instances.entry(processor_info.app_id).and_modify(|app| {
 		app.instance = instance;
 		app.instance_docker_log = docker_log_instance;
 		if run_as_docker {
@@ -634,7 +635,7 @@ async fn processor_task(
 	let mut running_processors = running_processor.lock().await;
 	let processor_instances = &mut running_processors.processors;
 	processor_instances
-		.entry(processor_info.app_hash)
+		.entry(processor_info.app_id)
 		.and_modify(|instance| instance.running = status);
 	Ok(())
 }
@@ -907,23 +908,23 @@ async fn close_processor_instance(
 }
 
 async fn filter_processor_instance(
-	processors: &mut HashMap<H256, ProcessorInstance>,
+	processors: &mut HashMap<u32, ProcessorInstance>,
 	processor_infos: &Vec<ProcessorDownloadInfo>,
-) -> Vec<H256> {
+) -> Vec<u32> {
 	let mut remove_entrys = Vec::new();
 	{
 		for processor in &mut *processors {
 			let mut find_flag = false;
-			let app_hash = processor.0;
+			let app_id = processor.0;
 			for processor_info in processor_infos {
-				if *app_hash == processor_info.app_hash {
+				if *app_id == processor_info.app_id {
 					find_flag = true;
 					break;
 				}
 			}
 			if !find_flag {
 				let _ = close_processor_instance(processor.1).await;
-				remove_entrys.push(*app_hash);
+				remove_entrys.push(*app_id);
 			}
 		}
 	}
@@ -978,8 +979,10 @@ where
 			processors.remove_entry(&remove_entry);
 		}
 		for processor_info in processor_infos {
+			let app_id = processor_info.app_id;
 			let app_hash = processor_info.app_hash;
-			let processor = processors.entry(app_hash).or_insert(ProcessorInstance {
+			let processor = processors.entry(app_id).or_insert(ProcessorInstance {
+				app_id,
 				app_hash,
 				running: RunStatus::Pending,
 				processor_info: Some(processor_info.clone()),
@@ -992,11 +995,9 @@ where
 
 			if *run_status == RunStatus::Pending {
 				processor.running = RunStatus::Downloading;
-				let app_hash = processor.app_hash;
-				let p_run_args_key =
-					format!("{}:{}", P_RUN_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
-				let p_option_args_key =
-					format!("{}:{}", P_OPTION_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
+				let app_id = processor.app_id;
+				let p_run_args_key = format!("{}:{}", P_RUN_ARGS_KEY, app_id);
+				let p_option_args_key = format!("{}:{}", P_OPTION_ARGS_KEY, app_id);
 				let run_args = get_offchain_storage::<_, TBackend>(
 					offchain_storage.clone(),
 					p_run_args_key.as_bytes(),
@@ -1033,11 +1034,9 @@ where
 				let app_hash = app_info.app_hash;
 				let run_status = &app.running;
 				if old_group_id != new_group && *run_status == RunStatus::Pending {
-					let sync_args_key =
-						format!("{}:{}", SYNC_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
+					let sync_args_key = format!("{}:{}", SYNC_ARGS_KEY, app_id);
 
-					let option_args_key =
-						format!("{}:{}", OPTION_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
+					let option_args_key = format!("{}:{}", OPTION_ARGS_KEY, app_id);
 
 					let sync_args = get_offchain_storage::<_, TBackend>(
 						offchain_storage.clone(),
@@ -1077,15 +1076,13 @@ where
 	if should_run {
 		let mut app = running_app.lock().await;
 		let run_status = &app.running;
-		let app_hash = app.app_hash;
+		let app_id = app.app_id;
 		log::info!("run:{:?}", app);
 		if let Some(app_info) = app.app_info.clone() {
 			if *run_status == RunStatus::Downloaded {
-				let run_args_key =
-					format!("{}:{}", RUN_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
+				let run_args_key = format!("{}:{}", RUN_ARGS_KEY, app_id);
 
-				let option_args_key =
-					format!("{}:{}", OPTION_ARGS_KEY, HexDisplay::from(&app_hash.as_bytes()));
+				let option_args_key = format!("{}:{}", OPTION_ARGS_KEY, app_id);
 
 				let run_args = get_offchain_storage::<_, TBackend>(
 					offchain_storage.clone(),
