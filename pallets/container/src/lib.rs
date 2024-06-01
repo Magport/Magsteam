@@ -344,35 +344,37 @@ impl<T: Config> Pallet<T> {
 		}
 		let url = DefaultUrl::<T>::get().expect("Need set url");
 
-		for app_id in processors {
-			let p_app_info = APPInfoMap::<T>::get(app_id);
+		for group_id in processors {
+			if let Some(app_id) = GroupAPPMap::<T>::get(group_id) {
+				let p_app_info = APPInfoMap::<T>::get(app_id);
 
-			if let Some(app_info) = p_app_info {
-				let batch_client = app_info.batch_client;
+				if let Some(app_info) = p_app_info {
+					let batch_client = app_info.batch_client;
 
-				let args = batch_client.args.and_then(|log| Some(log.as_slice().to_vec()));
+					let args = batch_client.args.and_then(|log| Some(log.as_slice().to_vec()));
 
-				let log = batch_client.log.and_then(|log| Some(log.as_slice().to_vec()));
+					let log = batch_client.log.and_then(|log| Some(log.as_slice().to_vec()));
 
-				let is_docker_image = if let Some(is_docker) = batch_client.is_docker_image {
-					is_docker
-				} else {
-					false
-				};
+					let is_docker_image = if let Some(is_docker) = batch_client.is_docker_image {
+						is_docker
+					} else {
+						false
+					};
 
-				let docker_image = batch_client
-					.docker_image
-					.and_then(|docker_image| Some(docker_image.as_slice().to_vec()));
-				download_infos.push(ProcessorDownloadInfo {
-					app_hash: batch_client.app_hash,
-					file_name: batch_client.file_name.into(),
-					size: batch_client.size,
-					url: url.clone().into(),
-					args,
-					log,
-					is_docker_image,
-					docker_image,
-				});
+					let docker_image = batch_client
+						.docker_image
+						.and_then(|docker_image| Some(docker_image.as_slice().to_vec()));
+					download_infos.push(ProcessorDownloadInfo {
+						app_hash: batch_client.app_hash,
+						file_name: batch_client.file_name.into(),
+						size: batch_client.size,
+						url: url.clone().into(),
+						args,
+						log,
+						is_docker_image,
+						docker_image,
+					});
+				}
 			}
 		}
 		download_infos

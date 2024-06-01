@@ -302,6 +302,7 @@ struct ProcessorInstance {
 	instance: Option<Child>,
 	instance_docker: bool,
 	instance_docker_name: Option<Vec<u8>>,
+	instance_docker_log: Option<Child>,
 }
 #[derive(Debug)]
 struct RunningProcessor {
@@ -450,6 +451,7 @@ async fn processor_run_task(
 
 	// start new instance
 	let mut instance = None;
+	let mut docker_log_instance = None;
 	if run_as_docker {
 		let image_name = processor_info.docker_image.ok_or("docker image not exist")?;
 		let docker_image = std::str::from_utf8(&image_name)?;
@@ -461,7 +463,11 @@ async fn processor_run_task(
 			outputs.try_clone()?,
 		)
 		.await;
-		log::info!("start docker container :{:?}", start_result);
+		log::info!("start processor docker container :{:?}", start_result);
+		docker_log_instance = Some(
+			redirect_docker_container_log(std::str::from_utf8(&processor_info.file_name)?, outputs)
+				.await?,
+		);
 	} else {
 		let download_path = format!(
 			"{}/sdk/{}",
@@ -482,6 +488,7 @@ async fn processor_run_task(
 	let processor_instances = &mut running_processors.processors;
 	processor_instances.entry(processor_info.app_hash).and_modify(|app| {
 		app.instance = instance;
+		app.instance_docker_log = docker_log_instance;
 		if run_as_docker {
 			app.instance_docker = true;
 			app.instance_docker_name = Some(processor_info.file_name);
@@ -494,6 +501,7 @@ async fn processor_run_task(
 	log::info!("app:{:?}", running_processors);
 	Ok(())
 }
+
 async fn processor_task(
 	data_path: PathBuf,
 	processor_info: ProcessorDownloadInfo,
@@ -820,6 +828,12 @@ async fn close_processor_instance(
 		if instance.instance_docker {
 			//reomve docker container
 			if let Some(docker_name) = &instance.instance_docker_name {
+				//kill processor docker log instance first
+				if let Some(ref mut log_instance) = &mut instance.instance_docker_log {
+					log_instance.kill()?;
+					let kill_result = log_instance.wait()?;
+					log::info!("kill processor old docker log instance:{:?}", kill_result);
+				}
 				let kill_result = remove_docker_container(std::str::from_utf8(&docker_name)?).await;
 				log::info!("kill old docker instance of processor:{:?}", kill_result);
 			}
@@ -833,6 +847,7 @@ async fn close_processor_instance(
 	}
 	Ok(())
 }
+
 async fn filter_processor_instance(
 	processors: &mut HashMap<H256, ProcessorInstance>,
 	processor_infos: &Vec<ProcessorDownloadInfo>,
@@ -913,6 +928,7 @@ where
 				instance: None,
 				instance_docker: false,
 				instance_docker_name: None,
+				instance_docker_log: None,
 			});
 			let run_status = &processor.running;
 
