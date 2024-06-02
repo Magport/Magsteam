@@ -1,3 +1,17 @@
+//! Container Spawner
+//!
+//! After the node is started, a background service is created, which will be executed until the
+//! node program is closed. After receiving the block of the relay chain (forming a 6s cycle), the
+//! background service will call the download application task (if a download signal is detected)
+//! and the execution application task (if an execution signal is detected). Download application
+//! task: Determine whether the currently running node is in a certain group. If not, end this task.
+//! If the new group is the same as the previous group, end this task. If it is in a certain group
+//! and is different from the previously assigned group (the first time the group information is
+//! obtained, the subsequent logic will also be executed), then obtain the application information
+//! corresponding to the group, check whether the application has been downloaded, if not, download
+//! the application, and then start the synchronization block process. Execute application task:
+//! Determine whether the effective time has arrived and there is a new application to be started.
+//! If not, do not execute. If so, stop the old application and start the new application.
 use codec::Decode;
 use cumulus_primitives_core::{ParaId, PersistedValidationData};
 use cumulus_relay_chain_interface::{RelayChainInterface, RelayChainResult};
@@ -32,11 +46,17 @@ use std::{
 	sync::Arc,
 };
 
+// Consensus client startup consensus arguments.
 pub const RUN_ARGS_KEY: &str = "run_args";
+// Consensus client startup sync block arguments.
 pub const SYNC_ARGS_KEY: &str = "sync_args";
+// Consensus client run as docker container startup arguments.
 pub const OPTION_ARGS_KEY: &str = "option_args";
+// Processor client startup arguments.
 pub const P_RUN_ARGS_KEY: &str = "p_run_args";
+// Processor client run as docker container startup arguments.
 pub const P_OPTION_ARGS_KEY: &str = "p_option_args";
+
 struct PartialRangeIter {
 	start: u64,
 	end: u64,
@@ -68,6 +88,7 @@ impl Iterator for PartialRangeIter {
 	}
 }
 
+// Calculate the sha256 value of the file.
 async fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, Box<dyn Error + Send + Sync>> {
 	let mut context = Context::new(&SHA256);
 	let mut buffer = [0; 1024];
@@ -83,6 +104,7 @@ async fn sha256_digest<R: Read>(mut reader: R) -> Result<Digest, Box<dyn Error +
 	Ok(context.finish())
 }
 
+// Download the client binary from the network.
 async fn download_sdk(
 	data_path: PathBuf,
 	file_name: &str,
@@ -156,6 +178,8 @@ async fn download_sdk(
 
 	Ok(())
 }
+
+// Determine whether to download an application whose hash is a certain value.
 async fn need_download(
 	data_path: &str,
 	app_hash: H256,
@@ -175,6 +199,7 @@ async fn need_download(
 	}
 }
 
+// Determine whether you need to pull a Docker image with a hash value.
 async fn need_pull_docker_image(
 	docker_image: &str,
 	file_hash: H256,
@@ -186,6 +211,8 @@ async fn need_pull_docker_image(
 	}
 	Ok(need)
 }
+
+// Check if a docker image exists.
 async fn check_docker_image_exist(
 	docker_image: &str,
 ) -> Result<bool, Box<dyn Error + Send + Sync>> {
@@ -210,6 +237,7 @@ async fn check_docker_image_exist(
 	Ok(result)
 }
 
+// Pull docker image.
 async fn download_docker_image(
 	docker_image: &str,
 	file_hash: H256,
@@ -222,6 +250,7 @@ async fn download_docker_image(
 	Ok(result)
 }
 
+// Remove docker container by name.
 async fn remove_docker_container(container_name: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
 	let mut docker_cmd = format!("container stop {}", container_name);
 	let mut args: Vec<&str> = docker_cmd.split(' ').into_iter().map(|arg| arg).collect();
@@ -235,6 +264,7 @@ async fn remove_docker_container(container_name: &str) -> Result<(), Box<dyn Err
 	Ok(())
 }
 
+// Run docker container.
 async fn start_docker_container(
 	container_name: &str,
 	docker_image: &str,
@@ -310,7 +340,9 @@ async fn redirect_docker_container_log(
 
 #[derive(Debug, PartialEq, Eq)]
 enum StartType {
+	/// Synchronous Block
 	SYNC,
+	/// Running consensus
 	RUN,
 }
 #[derive(Debug, PartialEq, Eq)]
@@ -325,40 +357,68 @@ enum RunStatus {
 	Downloaded,
 	Running,
 }
+
+/// Client information of sequencer operation.
+/// Use instance1 and instance2 to save old clients and new clients alternately.
 #[derive(Debug)]
 struct RunningApp {
+	/// Group id,start from 0.
 	group_id: u32,
+	/// App id,start from 1.
 	app_id: u32,
+	/// App sha256
 	app_hash: H256,
+	/// Running status.
 	running: RunStatus,
+	/// App info.
 	app_info: Option<DownloadInfo>,
+	/// Process instance 1.
 	instance1: Option<Child>,
+	/// Process instance 2.
 	instance2: Option<Child>,
+	/// Instance 1 is docker container or not.
 	instance1_docker: bool,
+	/// Instance 2 is docker container or not.
 	instance2_docker: bool,
+	/// Instance 1 docker container name.
 	instance1_docker_name: Option<Vec<u8>>,
+	/// Instance 2 docker container name.
 	instance2_docker_name: Option<Vec<u8>>,
+	/// Instance 1 docker container instance of linux process.
 	instance1_docker_log: Option<Child>,
+	/// Instance 2 docker container instance of linux process.
 	instance2_docker_log: Option<Child>,
+	/// Current instance,1 or 2.
 	cur_ins: InstanceIndex,
 }
 
+/// Client information of processor operation.
 #[derive(Debug)]
 struct ProcessorInstance {
+	/// App id,start from 1.
 	app_id: u32,
+	/// App sha256
 	app_hash: H256,
+	/// Running status.
 	running: RunStatus,
+	/// App info.
 	processor_info: Option<ProcessorDownloadInfo>,
+	/// Instance of process.
 	instance: Option<Child>,
+	/// Instance is docker container or not.
 	instance_docker: bool,
+	/// Instance docker container name.
 	instance_docker_name: Option<Vec<u8>>,
+	/// Instance docker container instance of linux process.
 	instance_docker_log: Option<Child>,
 }
 #[derive(Debug)]
 struct RunningProcessor {
+	/// app_id:processor info
 	processors: HashMap<u32, ProcessorInstance>,
 }
 
+// Download the sequencer client from the network and start syncing block data.
 async fn app_download_task(
 	data_path: PathBuf,
 	app_info: DownloadInfo,
@@ -443,6 +503,7 @@ async fn app_download_task(
 	Ok(())
 }
 
+// Download and start the processor client.
 async fn processor_run_task(
 	data_path: PathBuf,
 	processor_info: ProcessorDownloadInfo,
@@ -557,6 +618,7 @@ async fn processor_run_task(
 	Ok(())
 }
 
+// Background task of processor.
 async fn processor_task(
 	data_path: PathBuf,
 	processor_info: ProcessorDownloadInfo,
@@ -640,6 +702,7 @@ async fn processor_task(
 	Ok(())
 }
 
+// Background task of sequncer.
 async fn app_run_task(
 	data_path: PathBuf,
 	app_info: DownloadInfo,
@@ -865,6 +928,7 @@ async fn app_run_task(
 	Ok(())
 }
 
+// Get storage of offchain.
 async fn get_offchain_storage<Block, TBackend>(
 	offchain_storage: Option<TBackend::OffchainStorage>,
 	args: &[u8],
@@ -880,6 +944,7 @@ where
 	}
 }
 
+// Kill instance of processor.
 async fn close_processor_instance(
 	instance: &mut ProcessorInstance,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -907,6 +972,7 @@ async fn close_processor_instance(
 	Ok(())
 }
 
+// Kill processor of not assigned group.
 async fn filter_processor_instance(
 	processors: &mut HashMap<u32, ProcessorInstance>,
 	processor_infos: &Vec<ProcessorDownloadInfo>,
@@ -930,6 +996,8 @@ async fn filter_processor_instance(
 	}
 	remove_entrys
 }
+
+// Background task of sequencer and processor.
 async fn handle_new_best_parachain_head<P, Block, TBackend>(
 	validation_data: PersistedValidationData,
 	parachain: &P,

@@ -1,3 +1,18 @@
+//! # Container Pallet
+//!
+//! This pallet is named container, hoping to be a container for various clients.
+//! The function it expects to achieve is to register various layer2 clients and start these clients
+//! when appropriate conditions are met.
+//!
+//! The roles that complete this work are called sequencer and processor.
+//! The sequencer is responsible for starting the consensus client,
+//! and the processor is responsible for starting the batcher client.
+//!
+//! In order to achieve the goal of being compatible with all layer2, the layer2 client is
+//! abstracted into a consensus client and a batcher client. The client can be started and run as a
+//! process or a docker container. The operation of the consensus client is based on the time
+//! sequence, and there are two steps: synchronization of blocks and consensus.
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
@@ -24,6 +39,7 @@ use sp_runtime::BoundedVec;
 use sp_std::{boxed::Box, vec};
 pub use weights::*;
 
+/// Client basic information structure, including consensus client and batcher client.
 #[derive(Derivative, Encode, Decode, TypeInfo, MaxEncodedLen)]
 #[derivative(
 	Clone(bound = ""),
@@ -36,30 +52,33 @@ pub use weights::*;
 #[codec(decode_bound())]
 #[scale_info(bounds(), skip_type_params(T))]
 pub struct AppClient<T: Config> {
+	/// Client hash(sha256), if client is run as docker container, this is digest.
 	pub app_hash: Hash,
-
+	/// Client file name.
 	pub file_name: BoundedVec<u8, T::MaxLengthFileName>,
-
+	/// Client file size, bytes.
 	pub size: u32,
-
+	/// Client startup common parameters.
 	pub args: Option<BoundedVec<u8, T::MaxArgLength>>,
-
+	/// Client operation log file.
 	pub log: Option<BoundedVec<u8, T::MaxLengthFileName>>,
-
+	/// Is started as a Docker container.
 	pub is_docker_image: Option<bool>,
-
+	/// Docker image name
 	pub docker_image: Option<BoundedVec<u8, T::MaxLengthFileName>>,
 }
 
+/// Registered application information structure.
 #[derive(Encode, Decode, Default, Clone, TypeInfo, MaxEncodedLen, Debug)]
 #[scale_info(skip_type_params(T))]
 pub struct APPInfo<T: Config> {
+	/// Account of register an application.
 	creator: T::AccountId,
-
+	/// Project name,uniquely identifies.
 	project_name: BoundedVec<u8, T::MaxLengthFileName>,
-
+	/// Consensus client.
 	consensus_client: AppClient<T>,
-
+	/// Batcher client.
 	batch_client: AppClient<T>,
 }
 
@@ -76,35 +95,40 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
-
+		/// Max length of file name
 		#[pallet::constant]
 		type MaxLengthFileName: Get<u32>;
-
+		/// Max number of registered app.
 		#[pallet::constant]
 		type MaxRuningAPP: Get<u32>;
-
+		/// Max length of url,for download client binary file.
 		#[pallet::constant]
 		type MaxUrlLength: Get<u32>;
-
+		/// Max count of arguments.
 		#[pallet::constant]
 		type MaxArgCount: Get<u32>;
-
+		/// Max length of arguments.
 		#[pallet::constant]
 		type MaxArgLength: Get<u32>;
 	}
 
+	/// By default, the application number starts from 1.
 	#[pallet::type_value]
 	pub fn ApplicationIDOnEmpty<T: Config>() -> u32 {
 		1
 	}
+
+	/// The next available application id.
 	#[pallet::storage]
 	#[pallet::getter(fn next_application_id)]
 	pub type NextApplicationID<T> = StorageValue<_, u32, ValueQuery, ApplicationIDOnEmpty<T>>;
 
+	/// Url storage.
 	#[pallet::storage]
 	#[pallet::getter(fn default_url)]
 	pub type DefaultUrl<T: Config> = StorageValue<_, BoundedVec<u8, T::MaxUrlLength>, OptionQuery>;
 
+	/// Registered application information, map of app_id:app_info.
 	#[pallet::storage]
 	#[pallet::getter(fn appinfo_map)]
 	pub type APPInfoMap<T: Config> = StorageMap<_, Twox64Concat, u32, APPInfo<T>, OptionQuery>;
@@ -123,14 +147,23 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		ReisterApp {
+			/// Account of register client.
 			creator: T::AccountId,
+			/// Assigned app id.
 			appid: u32,
+			/// Project name.
 			project_name: BoundedVec<u8, T::MaxLengthFileName>,
+			/// File name of consensus client.
 			consensus_client: BoundedVec<u8, T::MaxLengthFileName>,
+			/// Hash of consensus client.
 			consensus_hash: Hash,
+			/// File size of consensus client.
 			consensus_size: u32,
+			/// File name of batcher client.
 			batch_client: BoundedVec<u8, T::MaxLengthFileName>,
+			/// Hash of batcher client.
 			batch_hash: Hash,
+			/// File size of batcher client.
 			batch_size: u32,
 		},
 		SetDownloadURL {
@@ -146,6 +179,8 @@ pub mod pallet {
 
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		/// The logic executed by each parachain block queries how many groups there are and binds
+		/// the registered applications to the groups. One application is bound to one group.
 		fn on_initialize(_n: BlockNumberFor<T>) -> Weight
 		where
 			BlockNumberFor<T>: From<u32>,
@@ -196,6 +231,12 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		/// Register layer2 application client.
+		///
+		/// Parameters:
+		/// - `project_name`: The project name.
+		/// - `consensus_client`: Consensus client.
+		/// - `batch_client`: Batcher client.
 		#[pallet::call_index(0)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::register_app())]
 		pub fn register_app(
@@ -255,6 +296,10 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Set url for download client binary file.
+		///
+		/// Parameters:
+		/// - `url`: Url.
 		#[pallet::call_index(1)]
 		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_default_url())]
 		pub fn set_default_url(
@@ -312,6 +357,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
+	// Consensus client startup at which block number.
 	pub fn should_run() -> bool {
 		let next_round = <pallet_sequencer_grouping::Pallet<T>>::next_round();
 
@@ -324,6 +370,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
+	// Get sequencer group id.
 	pub fn get_group_id(author: T::AccountId) -> u32 {
 		let group_id_result = <pallet_sequencer_grouping::Pallet<T>>::account_in_group(author);
 		if let Ok(group_id) = group_id_result {
@@ -333,10 +380,14 @@ impl<T: Config> Pallet<T> {
 			0xFFFFFFFF
 		}
 	}
+
+	// Get the assigned group id.
 	pub fn get_groups() -> Vec<u32> {
 		<pallet_sequencer_grouping::Pallet<T>>::all_group_ids()
 	}
 
+	// Whether the account running the current node has been assigned a group, whether it is a
+	// processor, and whether the IP meets the requirements.
 	pub fn processor_run(author: T::AccountId, ip_address: Vec<u8>) -> Vec<ProcessorDownloadInfo> {
 		// let processors = <pallet_sequencer_grouping::Pallet<T>>::get_group_ids(author);
 		let mut download_infos: Vec<ProcessorDownloadInfo> = Vec::new();
