@@ -33,7 +33,7 @@ pub mod weights;
 mod mock;
 #[cfg(test)]
 mod tests;
-mod inherent;
+pub mod inherent;
 
 /// Read babe randomness info from the relay chain state proof
 pub trait GetBabeData<EpochIndex, Randomness> {

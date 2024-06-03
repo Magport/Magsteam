@@ -363,7 +363,8 @@ fn build_import_queue(
 		block_import,
 		move |_, _| async move {
 			let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-			Ok(timestamp)
+			let randomness = pallet_randomness::inherent::InherentDataProvider;;
+			Ok((timestamp, randomness))
 		},
 		slot_duration,
 		&task_manager.spawn_essential_handle(),
@@ -415,7 +416,11 @@ fn start_consensus(
 	);
 
 	let params = BasicAuraParams {
-		create_inherent_data_providers: move |_, ()| async move { Ok(()) },
+		create_inherent_data_providers: move |_, ()| async move {
+			let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+			let randomness = pallet_randomness::inherent::InherentDataProvider;;
+			Ok((timestamp, randomness))
+		},
 		block_import,
 		para_client: client,
 		relay_client: relay_chain_interface,

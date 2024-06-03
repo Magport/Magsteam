@@ -8935,6 +8935,7 @@ dependencies = [
  "futures",
  "jsonrpsee",
  "log",
+ "pallet-randomness",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
  "polkadot-cli",
