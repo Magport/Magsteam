@@ -37,6 +37,8 @@ pub trait WeightInfo {
 	fn deposit_for_pbtc() -> Weight;
 	fn redeem_btc() -> Weight;
 	fn redeem_process() -> Weight;
+	fn set_btc_height() -> Weight;
+	fn set_bridge_account() -> Weight;
 }
 
 /// Weights for pallet_template using the Substrate node and recommended hardware.
@@ -73,6 +75,27 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(2))
 			.saturating_add(T::DbWeight::get().writes(3))
 	}	
+	
+	fn set_btc_height() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `42`
+		//  Estimated: `1587`
+		// Minimum execution time: 14_487_000 picoseconds.
+		Weight::from_parts(14_969_000, 0)
+			.saturating_add(Weight::from_parts(0, 1587))
+			.saturating_add(T::DbWeight::get().reads(1))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}	
+
+	fn set_bridge_account() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `42`
+		//  Estimated: `1587`
+		// Minimum execution time: 14_487_000 picoseconds.
+		Weight::from_parts(14_969_000, 0)
+			.saturating_add(Weight::from_parts(0, 1587))
+			.saturating_add(T::DbWeight::get().writes(1))
+	}		
 }
 
 // For backwards compatibility and tests
@@ -110,4 +133,25 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(2))
 			.saturating_add(RocksDbWeight::get().writes(3))
 	}	
+	
+	fn set_btc_height() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `42`
+		//  Estimated: `1587`
+		// Minimum execution time: 14_487_000 picoseconds.
+		Weight::from_parts(14_969_000, 0)
+			.saturating_add(Weight::from_parts(0, 1587))
+			.saturating_add(RocksDbWeight::get().reads(1))
+			.saturating_add(RocksDbWeight::get().writes(1))
+	}	
+
+	fn set_bridge_account() -> Weight {
+		// Proof Size summary in bytes:
+		//  Measured:  `42`
+		//  Estimated: `1587`
+		// Minimum execution time: 14_487_000 picoseconds.
+		Weight::from_parts(14_969_000, 0)
+			.saturating_add(Weight::from_parts(0, 1587))
+			.saturating_add(RocksDbWeight::get().writes(1))
+	}			
 }

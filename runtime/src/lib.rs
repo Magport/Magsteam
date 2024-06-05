@@ -642,7 +642,7 @@ construct_runtime!(
 		SequencerStaking: pallet_sequencer_staking = 40,
 		SequencerGroupingPallet: pallet_sequencer_grouping = 41,
 		ContainerPallet:pallet_container = 51,
-		
+
 		// Bridge
 		BtcBridge:pallet_btc_bridge = 60,
 	}

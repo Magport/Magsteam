@@ -55,6 +55,11 @@ pub mod pallet {
 	pub type LastBtcHeight<T: Config> = StorageValue<_, u128, ValueQuery>;
 
 	#[pallet::storage]
+	#[pallet::getter(fn bridge_account_map)]
+	pub type BridgeAccountMap<T: Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, u32, OptionQuery>;
+
+	#[pallet::storage]
 	#[pallet::getter(fn depositinfo_map)]
 	pub type DepositInfoMap<T: Config> =
 		StorageMap<_, Twox64Concat, H256, DepositInfo<T>, OptionQuery>;
@@ -97,6 +102,13 @@ pub mod pallet {
 			fun: u32,
 			txid: H256,
 		},
+		SetBtcHeight {
+			btc_block_height: u128,
+		},
+		SetBridgeAccount {
+			bridge_account: AccountIdLookupOf<T>,
+			set_flag: bool,
+		},
 	}
 
 	#[pallet::error]
@@ -106,6 +118,7 @@ pub mod pallet {
 		RedeemNotExist,
 		RedeemProcced,
 		RedeemInternalError,
+		NotBridgeAccount,
 	}
 
 	#[pallet::call]
@@ -119,7 +132,9 @@ pub mod pallet {
 			#[pallet::compact] amount: T::Balance,
 			benifit_lookup: AccountIdLookupOf<T>,
 		) -> DispatchResult {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			_ = BridgeAccountMap::<T>::get(who).ok_or(Error::<T>::NotBridgeAccount)?;
+
 			let benifit = T::Lookup::lookup(benifit_lookup.clone())?;
 
 			let btc_block = LastBtcHeight::<T>::get();
@@ -209,7 +224,8 @@ pub mod pallet {
 			redeem_id_p: u128,
 			btc_block_height: u128,
 		) -> DispatchResult {
-			ensure_root(origin)?;
+			let who = ensure_signed(origin)?;
+			_ = BridgeAccountMap::<T>::get(who).ok_or(Error::<T>::NotBridgeAccount)?;
 
 			let (mut redeem_start, redeem_end) = Self::redeeminfo_pointer();
 			let mut redeem_id = redeem_id_p;
@@ -236,6 +252,36 @@ pub mod pallet {
 			}
 
 			Pallet::<T>::deposit_event(Event::<T>::RedeemProcess { redeem_id, fun, txid });
+			Ok(())
+		}
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_btc_height())]
+		pub fn set_btc_height(origin: OriginFor<T>, btc_block_height: u128) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			_ = BridgeAccountMap::<T>::get(who).ok_or(Error::<T>::NotBridgeAccount)?;
+
+			LastBtcHeight::<T>::set(btc_block_height);
+			Pallet::<T>::deposit_event(Event::<T>::SetBtcHeight { btc_block_height });
+			Ok(())
+		}
+
+		#[pallet::call_index(4)]
+		#[pallet::weight(<T as pallet::Config>::WeightInfo::set_bridge_account())]
+		pub fn set_bridge_account(
+			origin: OriginFor<T>,
+			bridge_account: AccountIdLookupOf<T>,
+			set_flag: bool,
+		) -> DispatchResult {
+			ensure_root(origin)?;
+
+			let who = T::Lookup::lookup(bridge_account.clone())?;
+			if set_flag {
+				BridgeAccountMap::<T>::insert(who, 1u32);
+			} else {
+				BridgeAccountMap::<T>::remove(who);
+			}
+			Pallet::<T>::deposit_event(Event::<T>::SetBridgeAccount { bridge_account, set_flag });
 			Ok(())
 		}
 	}
