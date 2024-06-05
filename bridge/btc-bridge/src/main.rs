@@ -117,19 +117,45 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	let api = OnlineClient::<StatemintConfig>::from_url("ws://127.0.0.1:42069").await?;
 	println!("Connection with parachain established.");
 
-	let mut checked_block_height = client.get_block_count()? as usize;
-	checked_block_height = checked_block_height - 100;
-	println!("start checked block height: {}", checked_block_height);
-
+	let confirm_blocks = 6;
+	let check_blocks = 10;
 	loop {
 		// Get bitcoin newwork the latest n blocks
-		let latest_block_height = client.get_block_count()? as usize;
+		let latest_block_height = client.get_block_count()? as u128;
 		println!("Loop, latest block height: {}", latest_block_height);
 
-		let mut num_blocks_to_check = latest_block_height - checked_block_height;
-		if num_blocks_to_check > 10 {
+		let storage_query = statemint::storage().btc_bridge().last_btc_height();
+		let last_btc_height = api.storage().at_latest().await?.fetch(&storage_query).await?;
+
+		let mut checked_block_height = last_btc_height.unwrap_or(0);
+		if checked_block_height < 1000 {
+			checked_block_height = latest_block_height;
+
+			let start_set_height_tx =
+				statemint::tx().btc_bridge().set_btc_height(checked_block_height.into());
+			let _start_set_height_events =
+				api.tx()
+					.sign_and_submit_then_watch_default(&start_set_height_tx, &alice_pair_signer)
+					.await
+					.map(|e| {
+						println!("start set height tx submitted, waiting for transaction to be finalized...");
+						e
+					})?
+					.wait_for_finalized_success()
+					.await?;
+			println!("start set checked block height:{}", checked_block_height);
+		}
+
+		println!("checked block height: {}", checked_block_height);
+
+		let mut num_blocks_to_check = 0;
+		if latest_block_height > checked_block_height + confirm_blocks {
+			num_blocks_to_check = latest_block_height - (checked_block_height + confirm_blocks);
+		}
+
+		if num_blocks_to_check > check_blocks {
 			// Adjustment as required
-			num_blocks_to_check = 10;
+			num_blocks_to_check = check_blocks;
 		} // Adjustment as required
 		let block_heights_to_check =
 			(checked_block_height..=checked_block_height + num_blocks_to_check).rev();
@@ -384,6 +410,19 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 				client.send_raw_transaction(&buf[..size]);
 				break;
 			}
+
+			let set_height_tx = statemint::tx().btc_bridge().set_btc_height(height.into());
+			let _set_height_events = api
+				.tx()
+				.sign_and_submit_then_watch_default(&set_height_tx, &alice_pair_signer)
+				.await
+				.map(|e| {
+					println!("set height tx submitted, waiting for transaction to be finalized...");
+					e
+				})?
+				.wait_for_finalized_success()
+				.await?;
+			println!("set checked block height:{}", height);
 		}
 	}
 }
@@ -431,7 +470,7 @@ async fn mu_sig_sign(message: &Message, sk1: &SecretKey, sk2: &SecretKey) -> Sig
 	});
 	let received_nonce_commitment2 = nonce_receiver.recv().await.unwrap();
 
-    // and then exchange nonces
+	// and then exchange nonces
 	task::spawn(async move {
 		nonce_sender.send(nonce1).await.unwrap();
 	});
@@ -441,7 +480,7 @@ async fn mu_sig_sign(message: &Message, sk1: &SecretKey, sk2: &SecretKey) -> Sig
 		nonce_sender.send(nonce2).await.unwrap();
 	});
 	let received_nonce2 = nonce_receiver.recv().await.unwrap();
-	
+
 	// Validating received nonce commitments
 	assert_eq!(nonce1.get_commitment(), received_nonce_commitment1);
 	assert_eq!(nonce2.get_commitment(), received_nonce_commitment2);
