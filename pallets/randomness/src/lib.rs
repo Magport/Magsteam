@@ -50,7 +50,7 @@ pub mod pallet {
     use sp_runtime::traits::Hash;
     use sp_std::convert::TryInto;
     #[pallet::pallet]
-    #[pallet::without_storage_info]
+    // #[pallet::without_storage_info]
     pub struct Pallet<T>(PhantomData<T>);
 
     /// Configuration trait of this pallet.
@@ -69,7 +69,11 @@ pub mod pallet {
     /// Relay epoch
     #[pallet::storage]
     #[pallet::getter(fn relay_epoch)]
-    pub(crate) type RelayEpoch<T: Config> = StorageValue<_, u64, ValueQuery>;
+    pub type RelayEpoch<T: Config> = StorageValue<_, u64, ValueQuery>;
+
+    // #[pallet::storage]
+    // #[pallet::getter(fn latest_relay_epoch_requested)]
+    // pub type LatestRelayEpochRequested<T: Config> = StorageValue<_, u64, ValueQuery>;
 
     /// Ensures the mandatory inherent was included in the block
     #[pallet::storage]
@@ -80,7 +84,7 @@ pub mod pallet {
     /// Removed once $value.request_count == 0
     #[pallet::storage]
     #[pallet::getter(fn randomness_results)]
-    pub type RandomnessResults<T: Config> =
+    pub(crate) type RandomnessResults<T: Config> =
         StorageMap<_, Twox64Concat, RequestType, RandomnessResult<T::Hash>>;
 
     #[pallet::call]
@@ -162,7 +166,9 @@ pub mod pallet {
     impl<T: Config> frame_support::traits::Randomness<T::Hash, BlockNumberFor<T>> for Pallet<T> {
         /// Uses the BABE randomness to generate a random seed.
         fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
-            let relay_epoch_index = <RelayEpoch<T>>::get();
+            let mut relay_epoch_index_bytes = subject.clone();
+            let relay_epoch_index = u64::decode(&mut relay_epoch_index_bytes).expect("Decoding failed");
+            log::info!("input relay epoch index: {:?}", relay_epoch_index);
             let randomness_output =
                 RandomnessResults::<T>::get(RequestType::BabeEpoch(relay_epoch_index))
                     .unwrap_or_else(|| {

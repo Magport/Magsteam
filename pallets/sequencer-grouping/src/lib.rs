@@ -30,7 +30,7 @@ pub mod pallet {
 	pub struct Pallet<T>(PhantomData<T>);
 
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_randomness::Config {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
@@ -125,7 +125,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
-		#[pallet::weight(T::WeightInfo::set_group_metric())]
+		#[pallet::weight(<T as crate::Config>::WeightInfo::set_group_metric())]
 		pub fn set_group_metric(
 			origin: OriginFor<T>,
 			group_size: u32,
@@ -143,7 +143,7 @@ pub mod pallet {
 
 		//#[cfg(feature = "runtime-benchmarks")]
 		#[pallet::call_index(1)]
-		#[pallet::weight(T::WeightInfo::benchmark_trigger_group(
+		#[pallet::weight(<T as crate::Config>::WeightInfo::benchmark_trigger_group(
 			T::MaxGroupSize::get(),
 			T::MaxGroupNumber::get()
 		))]
@@ -165,8 +165,9 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		pub fn shuffle_accounts(mut accounts: Vec<T::AccountId>) -> Vec<T::AccountId> {
-			let random_seed = b"shuffle_sequencers";
-			let random_value = T::RandomnessSource::random(random_seed);
+			// todo: the relay_epoch may change when the block is verified by the validator, which will cause the chain stalls
+			let relay_epoch = pallet_randomness::Pallet::<T>::relay_epoch();
+			let random_value = T::RandomnessSource::random(&relay_epoch.encode());
 			let random_value = <u64>::decode(&mut random_value.0.as_ref()).unwrap_or(0);
 			for i in (1..accounts.len()).rev() {
 				let j: usize = (random_value as usize) % (i + 1);

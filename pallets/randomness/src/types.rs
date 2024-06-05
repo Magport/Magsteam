@@ -1,6 +1,6 @@
 use frame_support::pallet_prelude::*;
 
-#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(PartialEq, Eq, Copy, Clone, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 #[scale_info(skip_type_params(T))]
 /// Shared request info, a subset of `RequestInfo`
 pub enum RequestType {
@@ -18,7 +18,7 @@ pub enum RequestInfo {
     BabeEpoch(u64, u64),
 }
 
-#[derive(PartialEq, Eq, Clone, Default, Encode, Decode, RuntimeDebug, TypeInfo)]
+#[derive(PartialEq, Eq, Clone, Default, Encode, Decode, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 /// Raw randomness snapshot, the unique value for a `RequestType` in `RandomnessResults` map
 pub struct RandomnessResult<Hash> {
     /// Randomness once available
