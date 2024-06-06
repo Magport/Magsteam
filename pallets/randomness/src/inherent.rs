@@ -2,6 +2,18 @@
 use codec::{Decode, Encode};
 use sp_inherents::{Error, InherentData, InherentIdentifier, IsFatalError};
 use sp_runtime::RuntimeString;
+use sc_service::TFullClient;
+use sc_executor::NativeElseWasmExecutor;
+use sp_runtime::{generic, OpaqueExtrinsic};
+use sp_runtime::traits::BlakeTwo256;
+use std::sync::Arc;
+use sp_keystore::{Keystore, KeystorePtr};
+
+pub type BlockNumber = u32;
+pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
+pub type Block = generic::Block<Header, OpaqueExtrinsic>;
+type FullClient<RuntimeApi, Executor> =
+TFullClient<Block, RuntimeApi, NativeElseWasmExecutor<Executor>>;
 
 #[derive(Encode)]
 #[cfg_attr(feature = "std", derive(Debug, Decode))]
@@ -32,17 +44,22 @@ impl InherentError {
 }
 
 /// The InherentIdentifier to set the babe randomness results
-pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"baberand";
+pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"vrf-rand";
 
-/// A bare minimum inherent data provider that provides no real data.
-/// The inherent is simply used as a way to kick off some computation
-/// until https://github.com/paritytech/substrate/pull/10128 lands.
-pub struct InherentDataProvider;
+pub struct InherentDataProvider<RuntimeApi, Executor>
+where
+    RuntimeApi: Send + Sync,
+    Executor: sc_executor::NativeExecutionDispatch + 'static,
+{
+    pub client: Arc<FullClient<RuntimeApi, Executor>>,
+    pub keystore: Arc<dyn Keystore>,
+}
 
 #[cfg(feature = "std")]
 #[async_trait::async_trait]
 impl sp_inherents::InherentDataProvider for InherentDataProvider {
     async fn provide_inherent_data(&self, inherent_data: &mut InherentData) -> Result<(), Error> {
+
         inherent_data.put_data(INHERENT_IDENTIFIER, &())
     }
 

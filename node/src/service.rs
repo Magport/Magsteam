@@ -416,9 +416,12 @@ fn start_consensus(
 	);
 
 	let params = BasicAuraParams {
-		create_inherent_data_providers: move |_, ()| async move {
+		create_inherent_data_providers: move |parent_header, inherent_data| async move {
 			let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-			let randomness = pallet_randomness::inherent::InherentDataProvider;;
+			let randomness = pallet_randomness::inherent::InherentDataProvider {
+				client: client.clone(),
+				keystore: keystore.clone(),
+			};;
 			Ok((timestamp, randomness))
 		},
 		block_import,
