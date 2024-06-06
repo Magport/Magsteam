@@ -153,7 +153,6 @@ pub mod pallet {
 				amount,
 			)?;
 
-			LastBtcHeight::<T>::set(btc_block_height);
 			DepositInfoMap::<T>::insert(
 				btc_txid,
 				DepositInfo {
@@ -248,7 +247,6 @@ pub mod pallet {
 					RedeemInfoMap::<T>::get(redeem_id).ok_or(Error::<T>::RedeemNotExist)?;
 				RedeemInfoMap::<T>::remove(redeem_id);
 				RedeemInfoHistoryMap::<T>::insert(redeem_id, redeem_info);
-				LastBtcHeight::<T>::set(btc_block_height);
 			}
 
 			Pallet::<T>::deposit_event(Event::<T>::RedeemProcess { redeem_id, fun, txid });
