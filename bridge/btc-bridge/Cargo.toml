@@ -1,22 +1,30 @@
 [package]
-name = "BtcBridge"
+name = "btc-bridge-popsicle"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 bs58 = { version = "0.3", default-features = false, features = ["alloc"] }
 codec = { package = "parity-scale-codec", version = "3.0.0", features = ["derive"], default-features = false }
+bounded-collections = { version = "0.2.0", default-features = false }
 hex = { version = "0.4", default-features = false }
 serde = { version = "1.0", optional = true }
+sha2 = { version = "0.9.5", default-features = false }
 scale-info = { version = "2.0.1", default-features = false, features = ["derive"] }
 tokio = { version = "1.35", features = ["macros", "time", "rt-multi-thread"] }
+clap = "3.0"
 hex-literal = "0.3"
 lazy_static = "1.4"
 serde_json = "1.0"
 secp256k1-zkp = "0.10.1"
+blake2 = "0.10.6"
+rand = "0.8.5"
 subxt = {version = "0.33.0"}
 subxt-signer = {version = "0.33.0"}
+bitcoin = "0.32.0"
+bitcoincore-rpc = "0.19.0"
 
 light-bitcoin = { git = "https://github.com/wd30130/light-bitcoin", branch = "develop-2022", default-features = false }
-bitcoincore-rpc = { git = "https://github.com/rust-bitcoin/rust-bitcoincore-rpc", branch = "master", default-features = false }
-bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", tag = "bitcoin-0.32.0", default-features = false }
+#bitcoincore-rpc = { git = "https://github.com/rust-bitcoin/rust-bitcoincore-rpc", branch = "master", default-features = false }
+#bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", tag = "bitcoin-0.32.0", default-features = false }
+#subxt = { git = "https://github.com/paritytech/subxt", tag = "v0.33.0", default-features = false }

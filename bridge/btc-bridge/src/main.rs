@@ -1,4 +1,33 @@
+// Copyright (C) Popsicle team.
+// This file is part of Popsicle.
+
+// Substrate is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// Substrate is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
+
+// Btc bridge for Popsicle
+// Author: Alex Wang
+
+use std::convert::TryInto;
+use std::str::FromStr;
+use std::thread::sleep;
+use std::time::Duration;
+
+use clap::{App, Arg};
+use codec::Decode;
 use hex_literal::hex;
+use rand::rngs::OsRng;
+
+//use secp256k1_zkp::{All, Message, Secp256k1, SecretKey, XOnlyPublicKey, schnorr::Signature};
 use light_bitcoin::{
 	crypto::dhash160,
 	//chain::TransactionOutput,
@@ -10,22 +39,20 @@ use light_bitcoin::{
 	//serialization::{self, Reader},
 	mast::Mast,
 };
-use rand::rngs::OsRng;
-use std::str::FromStr;
 
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 
 use bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use bitcoin::consensus::Encodable;
 use bitcoin::hashes::{sha256d, Hash};
-use bitcoin::key::{Keypair, Parity};
+use bitcoin::key::Keypair;
 use bitcoin::script::Instruction;
 use bitcoin::transaction::Version;
 //use bitcoin::key::{Keypair, TapTweak, TweakedKeypair, UntweakedPublicKey};
 use bitcoin::locktime::absolute;
 //use bitcoin::secp256k1::{rand, Signing, Verification};
 use bitcoin::secp256k1::{
-	schnorr::Signature, All, Message, PublicKey, Secp256k1, SecretKey, XOnlyPublicKey,
+	schnorr::Signature, All, Message, PublicKey, Scalar, Secp256k1, SecretKey, XOnlyPublicKey,
 };
 use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
 //use bitcoin::crypto::taproot::Signature;
@@ -42,15 +69,13 @@ use bitcoin::{
 	Witness, //Script,
 };
 
-use codec::Decode;
 use subxt::{
 	utils::{AccountId32, MultiAddress},
 	OnlineClient, PolkadotConfig,
 };
 use subxt_signer::sr25519::dev::{self};
 //use subxt::{Client, Error, RuntimeApi};
-use std::convert::TryInto;
-//use secp256k1_zkp::{All, Message, Secp256k1, SecretKey, XOnlyPublicKey, schnorr::Signature};
+
 use tokio::sync::mpsc::channel; //Receiver, Sender
 use tokio::task;
 
@@ -61,16 +86,53 @@ type StatemintConfig = PolkadotConfig;
 
 #[tokio::main]
 pub async fn main() {
-	if let Err(err) = run().await {
+	let matches = App::new("btc-bridge-popsicle")
+		.version("0.1.0")
+		.author("Alex Wang")
+		.about("Btc bridge for Popsicle")
+		.arg(
+			Arg::with_name("btcrpc")
+				.short('b')
+				.long("btcrpc")
+				.value_name("BtcRPCUrl")
+				.help("Set the btc rpc url")
+				.takes_value(true)
+				.required(false),
+		)
+		.arg(
+			Arg::with_name("poprpc")
+				.short('p')
+				.long("poprpc")
+				.help("Set Popsicle rpc url")
+				.takes_value(true)
+				.required(false),
+		)
+		.arg(
+			Arg::with_name("testnet")
+				.short('t')
+				.long("testnet")
+				.help("Set using Btc test net, default using Btc main net"),
+		)
+		.get_matches();
+
+	let btc_rpc = matches.value_of("btcrpc");
+	let popsicle_rpc = matches.value_of("poprpc");
+	let is_testnet = matches.is_present("testnet");
+
+	if let Err(err) = run(btc_rpc, popsicle_rpc, is_testnet).await {
 		eprintln!("{err}");
 	}
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
-	println!("Btc bridge POC!");
+async fn run(
+	btc_rpc: Option<&str>,
+	popsicle_rpc: Option<&str>,
+	is_testnet: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+	println!("Btc bridge for Popsicle!");
 
-	let light_network = LightNetwork::Testnet;
-	let network = Network::Testnet;
+	let light_network = if is_testnet { LightNetwork::Testnet } else { LightNetwork::Mainnet };
+	let network = if is_testnet { Network::Testnet } else { Network::Bitcoin };
 
 	println!(" a 2/3 threshold signature merkel tree:");
 	println!("    root(AB-AC(ABh,ACh), BCh)");
@@ -108,22 +170,27 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	let alice: MultiAddress<AccountId32, ()> = dev::alice().public_key().into();
 	let alice_pair_signer = dev::alice();
 
-	println!("Popsicle address: {:?}", alice);
+	println!("Alice popsicle address: {:?}", alice);
 
 	// Loop:  check the taproot address new transactions: for output mint pBTC to
 	//      the address(Return Data reference),  for input complete proposal and
 	//      burn pending.
 	//      check the Popsicle new PBTC burn transactions, create and send the withdraw
 	//      transaction to BTC chain and set the proposal statu
-	let client =
-		Client::new("http://localhost:8332", Auth::UserPass("".to_string(), "".to_string()))
-			.unwrap();
+	let client = Client::new(
+		btc_rpc.unwrap_or("http://localhost:8332"),
+		Auth::UserPass("".to_string(), "".to_string()),
+	)
+	.unwrap();
 
-	let api = OnlineClient::<StatemintConfig>::from_url("ws://127.0.0.1:42069").await?;
-	println!("Connection with parachain established.");
+	let api =
+		OnlineClient::<StatemintConfig>::from_url(popsicle_rpc.unwrap_or("ws://127.0.0.1:42069"))
+			.await?;
+	println!("Connection with Popsicle established.");
 
 	let confirm_blocks = 6;
 	let check_blocks = 10;
+
 	loop {
 		// Get bitcoin newwork the latest n blocks
 		let latest_block_height = client.get_block_count()? as u128;
@@ -163,7 +230,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 			num_blocks_to_check = check_blocks;
 		} // Adjustment as required
 		let block_heights_to_check =
-			(checked_block_height..=checked_block_height + num_blocks_to_check).rev();
+			(checked_block_height + 1..=checked_block_height + 1 + num_blocks_to_check).rev();
 
 		// Check the nearest block
 		for height in block_heights_to_check {
@@ -250,7 +317,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 						mint_amount.to_sat().into(),
 						pop_address.into(),
 					);
-					let _pBTC_mint_events =
+					let _pbtc_mint_events =
 						api.tx()
 							.sign_and_submit_then_watch_default(&mint_tx, &alice_pair_signer)
 							.await
@@ -412,7 +479,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 						.await?;
 				println!("start proposal .");
 				//send proposal btc tx
-				client.send_raw_transaction(&buf[..size]);
+				let _ = client.send_raw_transaction(&buf[..size]);
 				break;
 			}
 
@@ -429,12 +496,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 				.await?;
 			println!("set checked block height:{}", height);
 		}
+		sleep(Duration::from_secs(10));
 	}
 }
 
 // check the address being btc tx output address
 fn is_txoutput_address(addr: &BtcAddress<NetworkChecked>, output: &TxOut) -> bool {
-	let script = light_bitcoin::script::Script::from(output.script_pubkey.into_bytes());
+	let script = light_bitcoin::script::Script::from(output.script_pubkey.clone().into_bytes());
 	let script_addresses = script
 		.extract_destinations()
 		.unwrap_or(Vec::<light_bitcoin::script::ScriptAddress>::new());
@@ -461,59 +529,66 @@ async fn mu_sig_sign(
 	//let message_hash = Message::from_slice(message).unwrap();
 
 	// 1. generate Mugsig
-	let public_keys: Vec<PublicKey> = Vec::new();
+	let mut public_keys: Vec<PublicKey> = Vec::new();
 	public_keys.push(sk1.public_key(&secp));
 	public_keys.push(sk2.public_key(&secp));
 
-	let musig = Musig::new(secp, message, public_keys)?;
+	let mut musig = Musig::new(secp, *message, public_keys)?;
 
 	// 2. Generating nonce commitments
 	let (nonce1, nonce_point1, nonce_commitment1) = musig.generate_nonce();
 	let (nonce2, nonce_point2, nonce_commitment2) = musig.generate_nonce();
 
 	// 3. Exchange of nonce commitments
-	let (nonce_sender, nonce_receiver) = channel(1);
+	let (nonce_commitment_sender, mut nonce_commitment_receiver) = channel(1);
 	task::spawn(async move {
-		nonce_sender.send(nonce_commitment1).await;
+		let _ = nonce_commitment_sender.send(nonce_commitment1).await;
 	});
-	let received_nonce_commitment1 = nonce_receiver.recv().await;
+	let received_nonce_commitment1 =
+		nonce_commitment_receiver.recv().await.ok_or("channel error 1")?;
 
+	let (nonce_commitment_sender, mut nonce_commitment_receiver) = channel(2);
 	task::spawn(async move {
-		nonce_sender.send(nonce_commitment2).await;
+		let _ = nonce_commitment_sender.send(nonce_commitment2).await;
 	});
-	let received_nonce_commitment2 = nonce_receiver.recv().await;
+	let received_nonce_commitment2 =
+		nonce_commitment_receiver.recv().await.ok_or("channel error 2")?;
 
 	// and then exchange nonces
+	let (nonce_sender, mut nonce_receiver) = channel(3);
 	task::spawn(async move {
-		nonce_sender.send(nonce_point1).await;
+		let _ = nonce_sender.send(nonce_point1).await;
 	});
-	let received_nonce_point1 = nonce_receiver.recv().await;
+	let received_nonce_point1 = nonce_receiver.recv().await.ok_or("channel error 3")?;
 
+	let (nonce_sender, mut nonce_receiver) = channel(4);
 	task::spawn(async move {
-		nonce_sender.send(nonce_point2).await;
+		let _ = nonce_sender.send(nonce_point2).await;
 	});
-	let received_nonce_point2 = nonce_receiver.recv().await;
+	let received_nonce_point2 = nonce_receiver.recv().await.ok_or("channel error 4")?;
 
 	// Validating received nonce commitments
-	assert_eq!(sha256d::Hash::hash(nonce_point1), received_nonce_commitment1);
-	assert_eq!(sha256d::Hash::hash(nonce_point2), received_nonce_commitment2);
+	assert_eq!(sha256d::Hash::hash(&nonce_point1.serialize()), received_nonce_commitment1);
+	assert_eq!(sha256d::Hash::hash(&nonce_point2.serialize()), received_nonce_commitment2);
 
-	musig.add_nonce_point(nonce_point1);
-	musig.add_nonce_point(nonce_point2);
+	musig.add_nonce_point(received_nonce_point1);
+	musig.add_nonce_point(received_nonce_point2);
 	// 4. Calculation of partial signatures
-	let part1 = musig.partial_sign(&sk1, &nonce1);
-	let part2 = musig.partial_sign(&sk2, &nonce2);
+	let part1 = musig.partial_sign(&sk1, &nonce1)?;
+	let part2 = musig.partial_sign(&sk2, &nonce2)?;
 
 	// and then exchange partial signature partial
+	let (partial_sender, mut partial_receiver) = channel(5);
 	task::spawn(async move {
-		nonce_sender.send(part1).await;
+		let _ = partial_sender.send(part1).await;
 	});
-	let received_part1 = nonce_receiver.recv().await;
+	let received_part1 = partial_receiver.recv().await.ok_or("channel error 5")?;
 
+	let (partial_sender, mut partial_receiver) = channel(6);
 	task::spawn(async move {
-		nonce_sender.send(part2).await;
+		let _ = partial_sender.send(part2).await;
 	});
-	let received_part2 = nonce_receiver.recv().await;
+	let received_part2 = partial_receiver.recv().await.ok_or("channel error 6")?;
 
 	musig.add_signature(received_part1);
 	musig.add_signature(received_part2);
@@ -534,21 +609,39 @@ struct Musig {
 	key_agg: KeyAgg,
 }
 
+use light_bitcoin::keys::Tagged;
+use light_bitcoin::mast::key::PublicKey as LbPublicKey;
+use light_bitcoin::mast::taggedhash::HashAdd;
+use sha2::Digest;
 impl Musig {
 	fn new(
 		secp: Secp256k1<All>,
-		message: &Message,
+		message: Message,
 		pub_keys: Vec<PublicKey>,
 	) -> Result<Self, Box<dyn std::error::Error>> {
-		Musig {
+		let mut lb_pub_keys_revert: Vec<LbPublicKey> = Vec::new();
+		for pub_key in pub_keys.iter() {
+			lb_pub_keys_revert.push(
+				LbPublicKey::parse_slice(&pub_key.serialize())
+					.map_err(|_err| "LbPublicKey parse error")?,
+			);
+		}
+
+		let mut lb_pub_keys: Vec<LbPublicKey> = Vec::new();
+		for lb_pub_key in lb_pub_keys_revert {
+			lb_pub_keys.push(lb_pub_key);
+		}
+
+		Ok(Musig {
 			secp,
 			message,
 			public_keys: pub_keys.clone(),
-			nonce_point: Vec::new(),
+			nonce_points: Vec::new(),
 			partial_signatures: Vec::new(),
 			agg_nonce_point: None,
-			key_agg: Mast::keys::KeyAgg::key_aggregation_n(pub_keys)?,
-		}
+			key_agg: KeyAgg::key_aggregation_n(lb_pub_keys.as_slice())
+				.map_err(|_err| "key aggregate error!")?,
+		})
 	}
 
 	// generate shared nonce point
@@ -556,7 +649,7 @@ impl Musig {
 		let mut rng = OsRng;
 		let nonce = SecretKey::new(&mut rng);
 		let nonce_point = PublicKey::from_secret_key(&self.secp, &nonce);
-		let nonce_point_commit = sha256d::Hash::hash(nonce_point.serialize());
+		let nonce_point_commit = sha256d::Hash::hash(&nonce_point.serialize());
 
 		(nonce, nonce_point, nonce_point_commit)
 	}
@@ -566,33 +659,42 @@ impl Musig {
 	}
 
 	// partial sign
-	fn partial_sign(&mut self, secret_key: &SecretKey, nonce: &SecretKey) -> Signature {
+	fn partial_sign(
+		&mut self,
+		secret_key: &SecretKey,
+		nonce: &SecretKey,
+	) -> Result<Signature, Box<dyn std::error::Error>> {
 		if self.nonce_points.len() != self.public_keys.len() {
-			return Err("nonce_points is not enough!");
+			return Err("nonce_points is not enough!".into());
 		}
 
 		if let None = self.agg_nonce_point {
-			let mut agg_point = self.nonce_points[0].mul_tweak(&self.key_agg.a_coefficients[0])?;
+			let mut agg_point = self.nonce_points[0]
+				.mul_tweak(&self.secp, &Self::to_scalar(&self.key_agg.a_coefficients[0])?)?;
 			for i in 0..self.nonce_points.len() - 1 {
-				agg_point = agg_point.combine(
-					self.nonce_points[i + 1].mul_tweak(&self.key_agg.a_coefficients[i + 1])?,
-				)?;
+				agg_point = agg_point.combine(&self.nonce_points[i + 1].mul_tweak(
+					&self.secp,
+					&Self::to_scalar(&self.key_agg.a_coefficients[i + 1])?,
+				)?)?;
 			}
-			self.agg_nonce_point = Some(agg_point);
+			self.agg_nonce_point = Some(agg_point.into());
 		}
 
-		let message_hash = sha2::Sha256::from_bytes(message.to_bytes())
-			.add(self.key_agg.xtidle.to_bytes())
-			.add(self.agg_nonce_point.unwrap().to_bytes())
+		//tagged hash  "BIP0340/challenge", R_x|P_x|msg
+		let tagged_hash = sha2::Sha256::default().tagged(b"BIP0340/challenge");
+		let sign_hash = tagged_hash
+			.add(&self.agg_nonce_point.unwrap().serialize())
+			.add(&self.key_agg.x_tilde.x_coor())
+			.add(self.message.as_ref())
 			.finalize();
 
 		let partial_signature = self.secp.sign_schnorr_with_aux_rand(
-			&Message::from(message_hash),
-			Keypair::from_seckey(secret_key),
-			nonce,
+			&Message::from_digest_slice(sign_hash.as_slice())?,
+			&Keypair::from_secret_key(&self.secp, &secret_key),
+			nonce.as_ref(),
 		);
 
-		partial_signature
+		Ok(partial_signature)
 	}
 	// add signature
 	fn add_signature(&mut self, partial_signature: Signature) {
@@ -601,34 +703,37 @@ impl Musig {
 	// combine signatures
 	fn combine_signatures(&self) -> Result<Signature, Box<dyn std::error::Error>> {
 		if self.partial_signatures.len() != self.public_keys.len() {
-			return Err("signatures is not enough!");
+			return Err("signatures is not enough!".into());
 		}
 
-		let sig_s_combine = SecretKey::from_slice(self.partial_signatures[0].serialize()[32..])
-			.mul_tweak(&self.key_agg.a_coefficients[0])?;
+		let mut sig_s_combine =
+			SecretKey::from_slice(&self.partial_signatures[0].serialize()[32..])?
+				.mul_tweak(&Self::to_scalar(&self.key_agg.a_coefficients[0])?)?;
 		for i in 0..self.partial_signatures.len() - 1 {
-			let sig_r_xonly =
-				XOnlyPublicKey::from_slice(self.partial_signatures[i + 1].serialize()[0..32]);
-			let sig_r = PublicKey::from_x_only_public_key(sig_r_xonly, Parity::Even);
-			let sig_s = SecretKey::from_slice(self.partial_signatures[i + 1].serialize()[32..]);
-
-			sig_r_combine =
-				sig_r_combine.combine(sig_r.mul_tweak(&self.key_agg.a_coefficients[i + 1])?)?;
-			sig_s_combine = sig_s_combine
-				.add_tweak(sig_s.mul_tweak(&self.key_agg.a_coefficients[i + 1])?.into())?;
+			let sig_s = SecretKey::from_slice(&self.partial_signatures[i + 1].serialize()[32..])?;
+			sig_s_combine = sig_s_combine.add_tweak(
+				&sig_s.mul_tweak(&Self::to_scalar(&self.key_agg.a_coefficients[i + 1])?)?.into(),
+			)?;
 		}
 
 		let mut array64u8 = [0u8; 64];
-		let (sig_r_combine_xonly, _) = sig_r_combine.x_only_public_key();
-		let sig_r_u8 = sig_r_combine_xonly.serialize();
-		let sig_s_u8 = sig_s_combine.serialize();
+		let sig_r_u8 = self.agg_nonce_point.unwrap().serialize();
+		let sig_s_u8 = sig_s_combine.as_ref();
 		for i in 0..32 {
 			array64u8[i] = sig_r_u8[i];
 			array64u8[i + 32] = sig_s_u8[i];
 		}
-		let combined_signature = Signature::from_slice(&array64u8);
+		let combined_signature = Signature::from_slice(&array64u8)?;
 
-		Some(combined_signature)
+		Ok(combined_signature)
+	}
+
+	fn to_scalar(
+		prkey: &light_bitcoin::mast::key::PrivateKey,
+	) -> Result<Scalar, Box<dyn std::error::Error>> {
+		let scalar = Scalar::from_be_bytes(prkey.serialize())?;
+
+		Ok(scalar)
 	}
 }
 
