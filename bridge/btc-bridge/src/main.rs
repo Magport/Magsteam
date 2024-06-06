@@ -4,24 +4,29 @@ use light_bitcoin::{
 	//chain::TransactionOutput,
 	keys::Network as LightNetwork,
 	keys::Public,
-	mast::Mast,
+	mast::key::KeyAgg,
 	//script::Opcode,
 	//merkle::PartialMerkleTree,
 	//serialization::{self, Reader},
+	mast::Mast,
 };
+use rand::rngs::OsRng;
 use std::str::FromStr;
 
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 
 use bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use bitcoin::consensus::Encodable;
-use bitcoin::hashes::Hash;
+use bitcoin::hashes::{sha256d, Hash};
+use bitcoin::key::{Keypair, Parity};
 use bitcoin::script::Instruction;
 use bitcoin::transaction::Version;
 //use bitcoin::key::{Keypair, TapTweak, TweakedKeypair, UntweakedPublicKey};
 use bitcoin::locktime::absolute;
 //use bitcoin::secp256k1::{rand, Signing, Verification};
-use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, SecretKey, XOnlyPublicKey};
+use bitcoin::secp256k1::{
+	schnorr::Signature, All, Message, PublicKey, Secp256k1, SecretKey, XOnlyPublicKey,
+};
 use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
 //use bitcoin::crypto::taproot::Signature;
 use bitcoin::{
@@ -362,7 +367,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 						.expect("failed to construct sighash");
 
 					let msg = Message::from(sighash);
-					let signature = mu_sig_sign(&msg, &prvkey1, &prvkey2).await;
+					let signature = mu_sig_sign(&msg, &prvkey1, &prvkey2).await?;
 					// put preimage and signature into witness
 					let taproot_signature = bitcoin::taproot::Signature { signature, sighash_type };
 					let mut witness = Witness::p2tr_key_spend(&taproot_signature);
@@ -446,58 +451,185 @@ fn is_txoutput_address(addr: &BtcAddress<NetworkChecked>, output: &TxOut) -> boo
 	}
 }
 
-async fn mu_sig_sign(message: &Message, sk1: &SecretKey, sk2: &SecretKey) -> Signature {
+// funtion for musig
+async fn mu_sig_sign(
+	message: &Message,
+	sk1: &SecretKey,
+	sk2: &SecretKey,
+) -> Result<Signature, Box<dyn std::error::Error>> {
 	let secp = Secp256k1::new();
 	//let message_hash = Message::from_slice(message).unwrap();
 
-	// 1. public key aggregation
-	let combined_pk = XOnlyPublicKey::from(sk1.public_key(&secp))
-		.combine(&XOnlyPublicKey::from(sk2.public_key(&secp)));
+	// 1. generate Mugsig
+	let public_keys: Vec<PublicKey> = Vec::new();
+	public_keys.push(sk1.public_key(&secp));
+	public_keys.push(sk2.public_key(&secp));
+
+	let musig = Musig::new(secp, message, public_keys)?;
 
 	// 2. Generating nonce commitments
-	let (nonce_commitment1, nonce1, _) = secp.generate_nonce_commitment(&sk1, &combined_pk);
-	let (nonce_commitment2, nonce2, _) = secp.generate_nonce_commitment(&sk2, &combined_pk);
+	let (nonce1, nonce_point1, nonce_commitment1) = musig.generate_nonce();
+	let (nonce2, nonce_point2, nonce_commitment2) = musig.generate_nonce();
 
 	// 3. Exchange of nonce commitments
 	let (nonce_sender, nonce_receiver) = channel(1);
 	task::spawn(async move {
-		nonce_sender.send(nonce_commitment1).await.unwrap();
+		nonce_sender.send(nonce_commitment1).await;
 	});
-	let received_nonce_commitment1 = nonce_receiver.recv().await.unwrap();
+	let received_nonce_commitment1 = nonce_receiver.recv().await;
 
 	task::spawn(async move {
-		nonce_sender.send(nonce_commitment2).await.unwrap();
+		nonce_sender.send(nonce_commitment2).await;
 	});
-	let received_nonce_commitment2 = nonce_receiver.recv().await.unwrap();
+	let received_nonce_commitment2 = nonce_receiver.recv().await;
 
 	// and then exchange nonces
 	task::spawn(async move {
-		nonce_sender.send(nonce1).await.unwrap();
+		nonce_sender.send(nonce_point1).await;
 	});
-	let received_nonce1 = nonce_receiver.recv().await.unwrap();
+	let received_nonce_point1 = nonce_receiver.recv().await;
 
 	task::spawn(async move {
-		nonce_sender.send(nonce2).await.unwrap();
+		nonce_sender.send(nonce_point2).await;
 	});
-	let received_nonce2 = nonce_receiver.recv().await.unwrap();
+	let received_nonce_point2 = nonce_receiver.recv().await;
 
 	// Validating received nonce commitments
-	assert_eq!(nonce1.get_commitment(), received_nonce_commitment1);
-	assert_eq!(nonce2.get_commitment(), received_nonce_commitment2);
+	assert_eq!(sha256d::Hash::hash(nonce_point1), received_nonce_commitment1);
+	assert_eq!(sha256d::Hash::hash(nonce_point2), received_nonce_commitment2);
 
+	musig.add_nonce_point(nonce_point1);
+	musig.add_nonce_point(nonce_point2);
 	// 4. Calculation of partial signatures
-	let part1 = secp.partial_sign(&sk1, &message, &nonce1, &received_nonce1);
-	let part2 = secp.partial_sign(&sk2, &message, &received_nonce1, &nonce2);
+	let part1 = musig.partial_sign(&sk1, &nonce1);
+	let part2 = musig.partial_sign(&sk2, &nonce2);
 
+	// and then exchange partial signature partial
+	task::spawn(async move {
+		nonce_sender.send(part1).await;
+	});
+	let received_part1 = nonce_receiver.recv().await;
+
+	task::spawn(async move {
+		nonce_sender.send(part2).await;
+	});
+	let received_part2 = nonce_receiver.recv().await;
+
+	musig.add_signature(received_part1);
+	musig.add_signature(received_part2);
 	// 5. polymerization of partial signatures
-	let mut final_signature = secp.aggregate_partials(&[part1, part2]).unwrap();
+	let final_signature = musig.combine_signatures()?;
 
-	// 6. Generate final signature
-	let finalized_signature = secp
-		.finalize_aggregate(&final_signature, &combined_pk, &nonce1, &nonce2)
-		.unwrap();
+	Ok(final_signature)
+}
 
-	finalized_signature
+//Musig Type
+struct Musig {
+	secp: Secp256k1<All>,
+	message: Message,
+	public_keys: Vec<PublicKey>,
+	nonce_points: Vec<PublicKey>,
+	partial_signatures: Vec<Signature>,
+	agg_nonce_point: Option<XOnlyPublicKey>,
+	key_agg: KeyAgg,
+}
+
+impl Musig {
+	fn new(
+		secp: Secp256k1<All>,
+		message: &Message,
+		pub_keys: Vec<PublicKey>,
+	) -> Result<Self, Box<dyn std::error::Error>> {
+		Musig {
+			secp,
+			message,
+			public_keys: pub_keys.clone(),
+			nonce_point: Vec::new(),
+			partial_signatures: Vec::new(),
+			agg_nonce_point: None,
+			key_agg: Mast::keys::KeyAgg::key_aggregation_n(pub_keys)?,
+		}
+	}
+
+	// generate shared nonce point
+	fn generate_nonce(&mut self) -> (SecretKey, PublicKey, sha256d::Hash) {
+		let mut rng = OsRng;
+		let nonce = SecretKey::new(&mut rng);
+		let nonce_point = PublicKey::from_secret_key(&self.secp, &nonce);
+		let nonce_point_commit = sha256d::Hash::hash(nonce_point.serialize());
+
+		(nonce, nonce_point, nonce_point_commit)
+	}
+	// add nonce point
+	fn add_nonce_point(&mut self, nonce_point: PublicKey) {
+		self.nonce_points.push(nonce_point);
+	}
+
+	// partial sign
+	fn partial_sign(&mut self, secret_key: &SecretKey, nonce: &SecretKey) -> Signature {
+		if self.nonce_points.len() != self.public_keys.len() {
+			return Err("nonce_points is not enough!");
+		}
+
+		if let None = self.agg_nonce_point {
+			let mut agg_point = self.nonce_points[0].mul_tweak(&self.key_agg.a_coefficients[0])?;
+			for i in 0..self.nonce_points.len() - 1 {
+				agg_point = agg_point.combine(
+					self.nonce_points[i + 1].mul_tweak(&self.key_agg.a_coefficients[i + 1])?,
+				)?;
+			}
+			self.agg_nonce_point = Some(agg_point);
+		}
+
+		let message_hash = sha2::Sha256::from_bytes(message.to_bytes())
+			.add(self.key_agg.xtidle.to_bytes())
+			.add(self.agg_nonce_point.unwrap().to_bytes())
+			.finalize();
+
+		let partial_signature = self.secp.sign_schnorr_with_aux_rand(
+			&Message::from(message_hash),
+			Keypair::from_seckey(secret_key),
+			nonce,
+		);
+
+		partial_signature
+	}
+	// add signature
+	fn add_signature(&mut self, partial_signature: Signature) {
+		self.partial_signatures.push(partial_signature);
+	}
+	// combine signatures
+	fn combine_signatures(&self) -> Result<Signature, Box<dyn std::error::Error>> {
+		if self.partial_signatures.len() != self.public_keys.len() {
+			return Err("signatures is not enough!");
+		}
+
+		let sig_s_combine = SecretKey::from_slice(self.partial_signatures[0].serialize()[32..])
+			.mul_tweak(&self.key_agg.a_coefficients[0])?;
+		for i in 0..self.partial_signatures.len() - 1 {
+			let sig_r_xonly =
+				XOnlyPublicKey::from_slice(self.partial_signatures[i + 1].serialize()[0..32]);
+			let sig_r = PublicKey::from_x_only_public_key(sig_r_xonly, Parity::Even);
+			let sig_s = SecretKey::from_slice(self.partial_signatures[i + 1].serialize()[32..]);
+
+			sig_r_combine =
+				sig_r_combine.combine(sig_r.mul_tweak(&self.key_agg.a_coefficients[i + 1])?)?;
+			sig_s_combine = sig_s_combine
+				.add_tweak(sig_s.mul_tweak(&self.key_agg.a_coefficients[i + 1])?.into())?;
+		}
+
+		let mut array64u8 = [0u8; 64];
+		let (sig_r_combine_xonly, _) = sig_r_combine.x_only_public_key();
+		let sig_r_u8 = sig_r_combine_xonly.serialize();
+		let sig_s_u8 = sig_s_combine.serialize();
+		for i in 0..32 {
+			array64u8[i] = sig_r_u8[i];
+			array64u8[i + 32] = sig_s_u8[i];
+		}
+		let combined_signature = Signature::from_slice(&array64u8);
+
+		Some(combined_signature)
+	}
 }
 
 /*
