@@ -274,6 +274,21 @@ async fn run(
 			//2. for taproot address's new transaction outs new_outs， mint pBTC
 			if new_outs.len() > 0 {
 				for out in new_outs {
+					let txid = out.compute_txid();
+					println!("Request mint pBTC txid={}.", txid);
+
+					//check whether the tx had been processed
+					let storage_query = statemint::storage()
+						.btc_bridge()
+						.deposit_info_map(&txid.as_byte_array().into());
+					let deposit_info =
+						api.storage().at_latest().await?.fetch(&storage_query).await?;
+					if let Some(_) = deposit_info {
+						println!("The deposit tx:{} had been processed!", txid);
+						continue;
+					}
+
+					//get output amount and op_return data for popsilce address
 					let mut mint_amount: Amount = Amount::ZERO;
 					let mut popsicle_address: Option<MultiAddress<AccountId32, ()>> = None;
 					for output in &out.output {
@@ -336,6 +351,28 @@ async fn run(
 				for input_tx in new_ins {
 					let txid = input_tx.compute_txid();
 					println!("finalize proposal txid={}.", txid);
+
+					//check whether the tx had been processed
+					let storage_query = statemint::storage()
+						.btc_bridge()
+						.redeem_tx_map(&txid.as_byte_array().into());
+					let redeem_id_option =
+						api.storage().at_latest().await?.fetch(&storage_query).await?;
+					if let None = redeem_id_option {
+						println!("The tx:{} is not the redeem tx!", txid);
+						continue;
+					}
+					let redeem_id = redeem_id_option.unwrap_or(0u128);
+					let storage_query = statemint::storage()
+						.btc_bridge()
+						.redeem_info_map(redeem_id);
+					let redeem_info =
+						api.storage().at_latest().await?.fetch(&storage_query).await?;
+					if let None = redeem_info {
+						println!("The redeem tx:{} had been processed!", txid);
+						continue;
+					}
+
 					//finish redeem or proposal
 					let fin_proposal_tx = statemint::tx().btc_bridge().redeem_process(
 						1,
@@ -356,6 +393,20 @@ async fn run(
 					println!("finalize proposal txid={}.", txid);
 				}
 			}
+
+			// set the processed btc block height
+			let set_height_tx = statemint::tx().btc_bridge().set_btc_height(height.into());
+			let _set_height_events = api
+				.tx()
+				.sign_and_submit_then_watch_default(&set_height_tx, &alice_pair_signer)
+				.await
+				.map(|e| {
+					println!("set height tx submitted, waiting for transaction to be finalized...");
+					e
+				})?
+				.wait_for_finalized_success()
+				.await?;
+			println!("set checked block height:{}", height);
 
 			//4. check pBTC burn transaction, tranfer to a burn_address， withdraw BTC
 			let storage_query = statemint::storage().btc_bridge().redeem_info_pointer();
@@ -482,19 +533,6 @@ async fn run(
 				let _ = client.send_raw_transaction(&buf[..size]);
 				break;
 			}
-
-			let set_height_tx = statemint::tx().btc_bridge().set_btc_height(height.into());
-			let _set_height_events = api
-				.tx()
-				.sign_and_submit_then_watch_default(&set_height_tx, &alice_pair_signer)
-				.await
-				.map(|e| {
-					println!("set height tx submitted, waiting for transaction to be finalized...");
-					e
-				})?
-				.wait_for_finalized_success()
-				.await?;
-			println!("set checked block height:{}", height);
 		}
 		sleep(Duration::from_secs(10));
 	}
