@@ -31,13 +31,17 @@ use rand::rngs::OsRng;
 use light_bitcoin::{
 	crypto::dhash160,
 	//chain::TransactionOutput,
-	keys::Network as LightNetwork,
-	keys::Public,
-	mast::key::KeyAgg,
+	keys::{
+		partial_sign, Network as LightNetwork, Public, PublicKey as LbKeysPublicKey,
+		SecretKey as LbKeysSecretKey,
+	},
+	mast::{
+		key::{KeyAgg, PublicKey as LbPublicKey},
+		Mast,
+	},
 	//script::Opcode,
 	//merkle::PartialMerkleTree,
 	//serialization::{self, Reader},
-	mast::Mast,
 };
 
 use bitcoincore_rpc::{Auth, Client, RpcApi};
@@ -45,14 +49,13 @@ use bitcoincore_rpc::{Auth, Client, RpcApi};
 use bitcoin::address::{NetworkChecked, NetworkUnchecked};
 use bitcoin::consensus::Encodable;
 use bitcoin::hashes::{sha256d, Hash};
-use bitcoin::key::Keypair;
 use bitcoin::script::Instruction;
 use bitcoin::transaction::Version;
 //use bitcoin::key::{Keypair, TapTweak, TweakedKeypair, UntweakedPublicKey};
 use bitcoin::locktime::absolute;
 //use bitcoin::secp256k1::{rand, Signing, Verification};
 use bitcoin::secp256k1::{
-	schnorr::Signature, All, Message, PublicKey, Scalar, Secp256k1, SecretKey, XOnlyPublicKey,
+	schnorr::Signature, All, Message, PublicKey, Scalar, Secp256k1, SecretKey,
 };
 use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
 //use bitcoin::crypto::taproot::Signature;
@@ -363,9 +366,8 @@ async fn run(
 						continue;
 					}
 					let redeem_id = redeem_id_option.unwrap_or(0u128);
-					let storage_query = statemint::storage()
-						.btc_bridge()
-						.redeem_info_map(redeem_id);
+					let storage_query =
+						statemint::storage().btc_bridge().redeem_info_map(redeem_id);
 					let redeem_info =
 						api.storage().at_latest().await?.fetch(&storage_query).await?;
 					if let None = redeem_info {
@@ -643,14 +645,10 @@ struct Musig {
 	public_keys: Vec<PublicKey>,
 	nonce_points: Vec<PublicKey>,
 	partial_signatures: Vec<Signature>,
-	agg_nonce_point: Option<XOnlyPublicKey>,
+	agg_nonce_point: Option<PublicKey>,
 	key_agg: KeyAgg,
 }
 
-use light_bitcoin::keys::Tagged;
-use light_bitcoin::mast::key::PublicKey as LbPublicKey;
-use light_bitcoin::mast::taggedhash::HashAdd;
-use sha2::Digest;
 impl Musig {
 	fn new(
 		secp: Secp256k1<All>,
@@ -718,21 +716,22 @@ impl Musig {
 			self.agg_nonce_point = Some(agg_point.into());
 		}
 
-		//tagged hash  "BIP0340/challenge", R_x|P_x|msg
-		let tagged_hash = sha2::Sha256::default().tagged(b"BIP0340/challenge");
-		let sign_hash = tagged_hash
-			.add(&self.agg_nonce_point.unwrap().serialize())
-			.add(&self.key_agg.x_tilde.x_coor())
-			.add(self.message.as_ref())
-			.finalize();
+		let partial_signature = partial_sign(
+			self.message.as_ref().into(),
+			LbKeysPublicKey::parse_compressed(&self.agg_nonce_point.unwrap().serialize())
+				.map_err(|_err| "Parse agg public key error")?,
+			LbKeysPublicKey::parse(&self.key_agg.x_tilde.serialize())
+				.map_err(|_err| "Parse agg nonce point error")?,
+			LbKeysSecretKey::parse(nonce.as_ref()).map_err(|_err| "Parse partial nonce error")?,
+			LbKeysSecretKey::parse(secret_key.as_ref())
+				.map_err(|_err| "Parse partial secret key error")?,
+		)
+		.map_err(|_err| "Partial_sign error")?;
 
-		let partial_signature = self.secp.sign_schnorr_with_aux_rand(
-			&Message::from_digest_slice(sign_hash.as_slice())?,
-			&Keypair::from_secret_key(&self.secp, &secret_key),
-			nonce.as_ref(),
-		);
+		let sig_value: [u8; 64] = partial_signature.clone().into();
+		let signature = Signature::from_slice(&sig_value)?;
 
-		Ok(partial_signature)
+		Ok(signature)
 	}
 	// add signature
 	fn add_signature(&mut self, partial_signature: Signature) {
