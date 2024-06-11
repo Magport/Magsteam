@@ -233,7 +233,7 @@ async fn run(
 			num_blocks_to_check = check_blocks;
 		} // Adjustment as required
 		let block_heights_to_check =
-			(checked_block_height + 1..=checked_block_height + 1 + num_blocks_to_check).rev();
+			checked_block_height + 1..=checked_block_height + 1 + num_blocks_to_check;
 
 		// Check the nearest block
 		for height in block_heights_to_check {
@@ -419,7 +419,7 @@ async fn run(
 			// get unspend list
 			let unspents =
 				client.list_unspent(None, None, Some(&[&taproot_addr.clone()]), None, None)?;
-			for redeem_id in result.0 + 1..result.1 {
+			for redeem_id in result.0 + 1..result.1 + 1 {
 				let storage_query = statemint::storage().btc_bridge().redeem_info_map(redeem_id);
 				let redeem_info = api.storage().at_latest().await?.fetch(&storage_query).await?;
 
@@ -655,17 +655,12 @@ impl Musig {
 		message: Message,
 		pub_keys: Vec<PublicKey>,
 	) -> Result<Self, Box<dyn std::error::Error>> {
-		let mut lb_pub_keys_revert: Vec<LbPublicKey> = Vec::new();
-		for pub_key in pub_keys.iter() {
-			lb_pub_keys_revert.push(
+		let mut lb_pub_keys: Vec<LbPublicKey> = Vec::new();
+		for pub_key in pub_keys.iter().rev() {
+			lb_pub_keys.push(
 				LbPublicKey::parse_slice(&pub_key.serialize())
 					.map_err(|_err| "LbPublicKey parse error")?,
 			);
-		}
-
-		let mut lb_pub_keys: Vec<LbPublicKey> = Vec::new();
-		for lb_pub_key in lb_pub_keys_revert {
-			lb_pub_keys.push(lb_pub_key);
 		}
 
 		Ok(Musig {
@@ -753,14 +748,14 @@ impl Musig {
 			)?;
 		}
 
-		let mut array64u8 = [0u8; 64];
-		let sig_r_u8 = self.agg_nonce_point.unwrap().serialize();
+		let mut bytes = [0u8; 64];
+		let (agg_nonce_xonly, _) = self.agg_nonce_point.unwrap().x_only_public_key();
+		let sig_r_u8 = agg_nonce_xonly.serialize();
 		let sig_s_u8 = sig_s_combine.as_ref();
-		for i in 0..32 {
-			array64u8[i] = sig_r_u8[i];
-			array64u8[i + 32] = sig_s_u8[i];
-		}
-		let combined_signature = Signature::from_slice(&array64u8)?;
+		bytes[0..32].copy_from_slice(&sig_r_u8[..]);
+		bytes[32..64].copy_from_slice(sig_s_u8);
+
+		let combined_signature = Signature::from_slice(&bytes)?;
 
 		Ok(combined_signature)
 	}
