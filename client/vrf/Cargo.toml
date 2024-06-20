@@ -1,0 +1,26 @@
+[package]
+name = "popsicle-vrf"
+version = "0.1.0"
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Substrate
+codec = { workspace = true, features = [ "derive", "std" ] }
+sp-api = { workspace = true, features = [ "std" ] }
+sp-application-crypto = { workspace = true }
+sp-core = { workspace = true, features = [ "std" ] }
+sp-keystore = { workspace = true }
+sp-runtime = { workspace = true }
+
+# Popsicle
+primitives-vrf = { workspace = true, features = [ "std" ] }
+
+# Polkadot
+polkadot-primitives = { workspace = true }
+
+# Other
+schnorrkel = { workspace = true }

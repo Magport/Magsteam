@@ -84,6 +84,7 @@ color-print = { workspace = true }
 
 # Local
 popsicle-runtime = { workspace = true }
+primitives-inherent = { workspace = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }

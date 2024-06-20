@@ -44,6 +44,7 @@ use frame_support::{
 	},
 	PalletId,
 };
+use frame_support::dispatch::RawOrigin;
 use frame_system::{
 	limits::{BlockLength, BlockWeights},
 	EnsureRoot,
@@ -79,6 +80,7 @@ use weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight};
 
 // XCM Imports
 use xcm::latest::prelude::BodyId;
+use primitives_vrf::{VrfDigest, VrfId};
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -495,6 +497,12 @@ impl pallet_utility::Config for Runtime {
 	type WeightInfo = pallet_utility::weights::SubstrateWeight<Runtime>;
 }
 
+impl pallet_randomness::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type WeightInfo = pallet_randomness::weights::SubstrateWeight<Runtime>;
+
+}
+
 // Start of Popsicle pallets
 
 pub const MAX_SEQUENCERS: u32 = 1000;
@@ -636,6 +644,7 @@ construct_runtime!(
 		SequencerStaking: pallet_sequencer_staking = 40,
 		SequencerGroupingPallet: pallet_sequencer_grouping = 41,
 		ContainerPallet:pallet_container = 51,
+		RandomnessPallet: pallet_randomness = 52,
 	}
 );
 
@@ -816,6 +825,22 @@ impl_runtime_apis! {
 	impl cumulus_primitives_core::CollectCollationInfo<Block> for Runtime {
 		fn collect_collation_info(header: &<Block as BlockT>::Header) -> cumulus_primitives_core::CollationInfo {
 			ParachainSystem::collect_collation_info(header)
+		}
+	}
+
+	impl primitives_vrf::VrfApi<Block> for Runtime {
+		fn get_last_vrf_output() -> Option<<Block as BlockT>::Hash> {
+			// TODO: remove in future runtime upgrade along with storage item
+			// if pallet_randomness::Pallet::<Self>::not_first_block().is_none() {
+			// 	return None;
+			// }
+			// pallet_randomness::Pallet::<Self>::local_vrf_output()
+			None
+		}
+
+		fn set_vrf_digest(vrf_digest: VrfDigest, vrf_author_pubkey: VrfId) {
+			let origin = RawOrigin::Root.into();
+			let _ = pallet_randomness::Pallet::<Self>::set_vrf_digest(origin, vrf_digest, vrf_author_pubkey);
 		}
 	}
 

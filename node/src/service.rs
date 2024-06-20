@@ -35,7 +35,7 @@ use sc_network_sync::SyncingService;
 use sc_service::{Configuration, PartialComponents, TFullBackend, TFullClient, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
-use sp_core::Pair;
+use sp_core::{Pair, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{app_crypto::AppCrypto, traits::BlakeTwo256};
 use substrate_prometheus_endpoint::Registry;
@@ -416,7 +416,15 @@ fn start_consensus(
 	);
 
 	let params = BasicAuraParams {
-		create_inherent_data_providers: move |_, ()| async move { Ok(()) },
+		create_inherent_data_providers: move |block: H256, ()| async move {
+			let vrf_digest_provider = primitives_inherent::InherentDataProvider::new(
+				client.clone(),
+				keystore.clone(),
+				collator_key.public().into(),
+				block,
+			);
+			Ok((vrf_digest_provider,))
+		},
 		block_import,
 		para_client: client,
 		relay_client: relay_chain_interface,

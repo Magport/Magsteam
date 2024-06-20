@@ -1,0 +1,33 @@
+[package]
+name = "primitives-inherent"
+version = "0.1.0"
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-trait = { workspace = true, optional = true }
+codec = { workspace = true, features = [ "derive" ] }
+sp-inherents = { workspace = true }
+sp-keystore = { workspace = true, optional = true }
+sp-runtime = { workspace = true }
+sp-api = { workspace = true }
+sp-core = { workspace = true }
+
+popsicle-vrf = { workspace = true }
+primitives-vrf = { workspace = true }
+pallet-randomness = { workspace = true }
+
+[features]
+default = [ "std" ]
+std = [
+    "async-trait",
+    "codec/std",
+    "sp-inherents/std",
+    "sp-keystore",
+    "sp-runtime/std",
+]
+runtime-benchmarks = []
+
