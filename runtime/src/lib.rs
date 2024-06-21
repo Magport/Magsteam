@@ -819,6 +819,17 @@ impl_runtime_apis! {
 		}
 	}
 
+	impl primitives_vrf::VrfApi<Block> for Runtime {
+		fn get_last_vrf_output() -> Option<<Block as BlockT>::Hash> {
+			// TODO: remove in future runtime upgrade along with storage item
+			// if pallet_randomness::Pallet::<Self>::not_first_block().is_none() {
+			// 	return None;
+			// }
+			// pallet_randomness::Pallet::<Self>::local_vrf_output()
+			None
+		}
+	}
+
 	#[cfg(feature = "try-runtime")]
 	impl frame_try_runtime::TryRuntime<Block> for Runtime {
 		fn on_runtime_upgrade(checks: frame_try_runtime::UpgradeCheckSelect) -> (Weight, Weight) {

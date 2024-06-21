@@ -9,7 +9,9 @@ edition = "2021"
 members = [
     "node",
     "runtime",
-    "pallets/*"
+    "pallets/*",
+    "primitives/*",
+    "client/*",
 ]
 resolver = "2"
 
@@ -64,6 +66,9 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 ] }
 scale-info = { version = "2.10.0", default-features = false, features = [
 	"derive",
+] }
+schnorrkel = { version = "0.11.4", default-features = false, features = [
+    "preaudit_deprecated",
 ] }
 
 # Substrate / FRAME
@@ -161,7 +166,7 @@ polkadot-cli = { version = "10.0.0", features = ["rococo-native"] }
 polkadot-primitives = { version = "10.0.0" }
 cumulus-client-cli = { version = "0.10.0" }
 cumulus-client-collator = { version = "0.10.0" }
-cumulus-client-consensus-aura = { version = "0.10.0" }
+cumulus-client-consensus-aura = { path = "client/cumulus-client-consensus-aura-0.10.0" }
 cumulus-client-consensus-common = { version = "0.10.0" }
 cumulus-client-consensus-proposer = { version = "0.10.0" }
 cumulus-client-service = { version = "0.10.0" }
@@ -174,3 +179,5 @@ pallet-sequencer-grouping ={ path = "./pallets/sequencer-grouping", default-feat
 pallet-sequencer-staking ={ path = "./pallets/sequencer-staking", default-features = false }
 pallet-container = { path = "pallets/container", default-features = false }
 primitives-container = {  path="./primitives/container", default-features = false }
+primitives-vrf = { path = "./primitives/vrf", default-features = false }
+popsicle-vrf = { path = "client/vrf", default-features = false }
