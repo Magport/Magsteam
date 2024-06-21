@@ -2,7 +2,7 @@
 
 //! VRF pre vrf object and conversion to DigestItem
 use codec::{Decode, Encode};
-use sp_core::sr25519::vrf::{VrfPreOutput, VrfProof, VrfInput, VrfSignData};
+use sp_core::sr25519::vrf::{VrfPreOutput, VrfProof, VrfInput, VrfSignData, VrfSignature};
 use sp_runtime::{generic::DigestItem, RuntimeDebug, BoundToRuntimeAppPublic, ConsensusEngineId};
 use sp_application_crypto::KeyTypeId;
 
@@ -60,15 +60,17 @@ pub fn make_vrf_sign_data<Hash: AsRef<[u8]>>(last_vrf_output: Hash) -> VrfSignDa
 	make_vrf_transcript(last_vrf_output).into()
 }
 
-/// Struct to implement `BoundToRuntimeAppPublic` by assigning Public = VrfId
-pub struct VrfSessionKey;
-
-impl BoundToRuntimeAppPublic for VrfSessionKey {
-	type Public = VrfId;
-}
+// /// Struct to implement `BoundToRuntimeAppPublic` by assigning Public = VrfId
+// pub struct VrfSessionKey;
+//
+// impl BoundToRuntimeAppPublic for VrfSessionKey {
+// 	type Public = VrfId;
+// }
 
 /// The ConsensusEngineId for VRF keys
 pub const VRF_ENGINE_ID: ConsensusEngineId = *b"rand";
+
+pub const AUTHOR_PUBKEY: ConsensusEngineId = *b"auth";
 
 /// The KeyTypeId used for VRF keys
 pub const VRF_KEY_ID: KeyTypeId = KeyTypeId(VRF_ENGINE_ID);
@@ -76,22 +78,22 @@ pub const VRF_KEY_ID: KeyTypeId = KeyTypeId(VRF_ENGINE_ID);
 /// VRFInOut context.
 pub static VRF_INOUT_CONTEXT: &[u8] = b"VRFInOutContext";
 
-// The strongly-typed crypto wrappers to be used by VRF in the keystore
-mod vrf_crypto {
-	use sp_application_crypto::{app_crypto, sr25519};
-	app_crypto!(sr25519, crate::VRF_KEY_ID);
-}
+// // The strongly-typed crypto wrappers to be used by VRF in the keystore
+// mod vrf_crypto {
+// 	use sp_application_crypto::{app_crypto, sr25519};
+// 	app_crypto!(sr25519, crate::VRF_KEY_ID);
+// }
+//
+// /// A vrf public key.
+// pub type VrfId = vrf_crypto::Public;
 
-/// A vrf public key.
-pub type VrfId = vrf_crypto::Public;
-
-/// A vrf signature.
-pub type VrfSignature = vrf_crypto::Signature;
-
-sp_application_crypto::with_pair! {
-	/// A vrf key pair
-	pub type VrfPair = vrf_crypto::Pair;
-}
+// /// A vrf signature.
+// pub type VrfSignature = vrf_crypto::Signature;
+//
+// sp_application_crypto::with_pair! {
+// 	/// A vrf key pair
+// 	pub type VrfPair = vrf_crypto::Pair;
+// }
 
 sp_api::decl_runtime_apis! {
 	pub trait VrfApi {

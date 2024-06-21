@@ -9024,6 +9024,7 @@ dependencies = [
 name = "popsicle-vrf"
 version = "0.1.0"
 dependencies = [
+ "log",
  "parity-scale-codec",
  "polkadot-primitives",
  "primitives-vrf",

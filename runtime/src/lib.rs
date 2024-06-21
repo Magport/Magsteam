@@ -17,7 +17,7 @@ use frame_system::EnsureSigned;
 use polkadot_runtime_common::xcm_sender::NoPriceForMessageDelivery;
 use smallvec::smallvec;
 use sp_api::impl_runtime_apis;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::{crypto::KeyTypeId, H256, OpaqueMetadata};
 use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
@@ -826,7 +826,12 @@ impl_runtime_apis! {
 			// 	return None;
 			// }
 			// pallet_randomness::Pallet::<Self>::local_vrf_output()
-			None
+			// log::warn!("vrf output default: {:?}", 135);
+			let number: u64 = 13;
+			let mut bytes = [0u8; 32];
+    		bytes[0..8].copy_from_slice(&number.to_le_bytes());
+            let hash_value: H256 = bytes.into();
+			Option::from(hash_value)
 		}
 	}
 

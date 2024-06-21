@@ -22,3 +22,4 @@ polkadot-primitives = { workspace = true }
 
 # Other
 schnorrkel = { workspace = true, default-features = false, features = [ "preaudit_deprecated" ] }
+log = "0.4.21"

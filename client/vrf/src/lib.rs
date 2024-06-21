@@ -1,8 +1,9 @@
 //! VRF client primitives for client-side verification
 
+use polkadot_primitives::PARACHAIN_KEY_TYPE_ID;
 use schnorrkel::keys::PublicKey;
 use sp_core::sr25519::Public;
-use primitives_vrf::{make_vrf_transcript, PreDigest, VrfApi, VrfId};
+use primitives_vrf::{make_vrf_transcript, PreDigest, VrfApi};
 use sp_application_crypto::{AppCrypto, ByteArray};
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
@@ -23,6 +24,7 @@ where
 	let runtime_api = client.runtime_api();
 
 	// first ? for runtime API, second ? for if last vrf output is not available
+
 	let last_vrf_output = runtime_api.get_last_vrf_output(parent).ok()??;
 	// first ? for runtime API, second ? for not VRF key associated with NimbusId
 	let vrf_pre_digest = sign_vrf(last_vrf_output, key, &keystore)?;
@@ -35,7 +37,7 @@ fn sign_vrf(last_vrf_output: H256, key: Public, keystore: &KeystorePtr) -> Optio
 	let transcript = make_vrf_transcript(last_vrf_output);
 	let try_sign = Keystore::sr25519_vrf_sign(
 		&**keystore,
-		VrfId::ID,
+		PARACHAIN_KEY_TYPE_ID,
 		&key,
 		&transcript.clone().into_sign_data(),
 	);
@@ -59,32 +61,3 @@ fn sign_vrf(last_vrf_output: H256, key: Public, keystore: &KeystorePtr) -> Optio
 		None
 	}
 }
-
-// pub struct VrfDigestsProvider<B, C> {
-// 	client: Arc<C>,
-// 	keystore: Arc<dyn Keystore>,
-// 	_marker: std::marker::PhantomData<B>,
-// }
-//
-// impl<B, C> VrfDigestsProvider<B, C> {
-// 	pub fn new(client: Arc<C>, keystore: Arc<dyn Keystore>) -> Self {
-// 		Self {
-// 			client,
-// 			keystore,
-// 			_marker: Default::default(),
-// 		}
-// 	}
-// }
-//
-// impl<B, C> DigestsProvider<NimbusId, H256> for VrfDigestsProvider<B, C>
-// where
-// 	B: sp_runtime::traits::Block<Hash = sp_core::H256>,
-// 	C: sp_api::ProvideRuntimeApi<B>,
-// 	C::Api: VrfApi<B>,
-// {
-// 	type Digests = Option<sp_runtime::generic::DigestItem>;
-//
-// 	fn provide_digests(&self, nimbus_id: NimbusId, parent: H256) -> Self::Digests {
-// 		vrf_pre_digest::<B, C>(&self.client, &self.keystore, nimbus_id, parent)
-// 	}
-// }

@@ -22,7 +22,7 @@
 //!
 //! For more information about AuRa, the Substrate crate should be checked.
 
-use codec::{Codec, Decode};
+use codec::{Codec, Decode, Encode};
 use cumulus_client_collator::{
 	relay_chain_driven::CollationRequest, service::ServiceInterface as CollatorServiceInterface,
 };
@@ -33,7 +33,7 @@ use cumulus_relay_chain_interface::RelayChainInterface;
 
 use polkadot_node_primitives::CollationResult;
 use polkadot_overseer::Handle as OverseerHandle;
-use polkadot_primitives::{CollatorPair, Id as ParaId, ValidationCode};
+use polkadot_primitives::{CollatorPair, Id as ParaId, PARACHAIN_KEY_TYPE_ID, ValidationCode};
 
 use futures::{channel::mpsc::Receiver, prelude::*};
 use sc_client_api::{backend::AuxStore, BlockBackend, BlockOf};
@@ -45,13 +45,15 @@ use sp_consensus::SyncOracle;
 use sp_consensus_aura::{AuraApi, SlotDuration};
 use sp_core::crypto::Pair;
 use sp_inherents::CreateInherentDataProviders;
-use sp_keystore::KeystorePtr;
+use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT, Member};
 use sp_state_machine::Backend as _;
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 use sp_runtime::DigestItem;
+use tracing::log;
 
 use popsicle_vrf::vrf_pre_digest;
+use primitives_vrf::AUTHOR_PUBKEY;
 
 use crate::collator as collator_util;
 
@@ -242,20 +244,24 @@ where
 			// generate vrf digest
 			let client_clone = params.para_client.clone();
 			let keystore_clone = params.keystore.clone();
+			let author_public = keystore_clone.sr25519_public_keys(PARACHAIN_KEY_TYPE_ID).first().unwrap().clone();
 			let vrf_digest = vrf_pre_digest::<Block, Client>(
 				&client_clone,
 				&keystore_clone,
-				params.collator_key.public().into(),
+				author_public,
 				parent_hash.into(),
 			);
-			let vrf_digest = vrf_digest.map(|item| vec![item]);
+			log::warn!("vrf digest: {:?}", vrf_digest);
+			let mut vrf_digest_vec = vrf_digest.map(|item| vec![item]);
+			vrf_digest_vec.get_or_insert_with(|| vec![]).push(DigestItem::PreRuntime(AUTHOR_PUBKEY, author_public.encode()));
+			log::warn!("vrf digest vec: {:?}", vrf_digest_vec.clone());
 
 			let maybe_collation = try_request!(
 				collator
 					.collate(
 						&parent_header,
 						&claim,
-						vrf_digest,
+						vrf_digest_vec,
 						(parachain_inherent_data, other_inherent_data),
 						params.authoring_duration,
 						// Set the block limit to 50% of the maximum PoV size.

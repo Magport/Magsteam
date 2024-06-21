@@ -415,6 +415,7 @@ fn start_consensus(
 		client.clone(),
 	);
 
+	// dbg!("Keystore contents:", format!("{:?}", keystore.));
 	let params = BasicAuraParams {
 		create_inherent_data_providers: move |_, ()| async move { Ok(()) },
 		block_import,
