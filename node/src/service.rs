@@ -415,18 +415,21 @@ fn start_consensus(
 		client.clone(),
 	);
 
+	let client_clone = client.clone();
+	let keystore_clone = keystore.clone();
 	let params = BasicAuraParams {
-		create_inherent_data_providers: move |block: H256, ()| async move {
+		create_inherent_data_providers: |block: H256, ()| async {
+
 			let vrf_digest_provider = primitives_inherent::InherentDataProvider::new(
-				client.clone(),
-				keystore.clone(),
+				client_clone,
+				keystore_clone,
 				collator_key.public().into(),
 				block,
 			);
 			Ok((vrf_digest_provider,))
 		},
 		block_import,
-		para_client: client,
+		para_client: client.clone(),
 		relay_client: relay_chain_interface,
 		sync_oracle,
 		keystore,

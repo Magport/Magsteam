@@ -9157,6 +9157,7 @@ dependencies = [
  "parity-scale-codec",
  "popsicle-vrf",
  "primitives-vrf",
+ "schnorrkel 0.11.4",
  "sp-api",
  "sp-core",
  "sp-inherents",

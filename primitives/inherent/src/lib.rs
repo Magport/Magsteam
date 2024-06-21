@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use codec::{Decode, Encode};
+use sp_core::sr25519::Public;
 use sp_inherents::{Error, InherentData, InherentIdentifier, IsFatalError};
 use sp_runtime::RuntimeString;
 use sp_keystore::KeystorePtr;
@@ -39,7 +40,7 @@ pub const INHERENT_IDENTIFIER: InherentIdentifier = *b"vrf-rand";
 pub struct InherentDataProvider<B, C> {
 	pub client: Arc<C>,
 	pub keystore: KeystorePtr,
-	pub key: primitives_vrf::VrfId,
+	pub key: Public,
 	pub parent: sp_core::H256,
 	_marker: std::marker::PhantomData<B>,
 }
