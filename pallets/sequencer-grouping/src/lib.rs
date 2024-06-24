@@ -240,10 +240,8 @@ pub mod pallet {
 
 	impl<T: Config> Pallet<T> {
 		pub fn shuffle_accounts(mut accounts: Vec<T::AccountId>) -> Vec<T::AccountId> {
-			// let random_seed = frame_system::Pallet::<T>::parent_hash().encode();
-			let random_seed = b"vrf-rand";
-			// let random_value = T::Randomness::random(random_seed);
 			let random_value = vrf::get_and_verify_randomness::<T>(false);
+			log::warn!("random_value: {:?}", random_value);
 			let random_value = <u64>::decode(&mut random_value.as_ref()).unwrap_or(0);
 			for i in (1..accounts.len()).rev() {
 				let j: usize = (random_value as usize) % (i + 1);
@@ -257,7 +255,6 @@ pub mod pallet {
 			let mut processor_info = ProcessorInfo::<T>::get();
 			let processor_count = processor_info.len() as u32;
 
-			// 如果 processor_info 为空，则直接返回
 			if processor_count == 0 {
 				return Err(Error::<T>::NoProcessors.into());
 			}

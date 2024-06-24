@@ -226,7 +226,7 @@ fn testnet_genesis(
 		"sequencerStaking": {
 			"candidates": vec![alice, bob],
 			"sequencerCommission": Perbill::from_percent(5),
-			"blocksPerRound": 10,
+			"blocksPerRound": 5,
 			// "numSelectedCandidates": 2,
 			"delegations": Vec::<(AccountId, AccountId, u128)>::new(),
 		}

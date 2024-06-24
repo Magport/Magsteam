@@ -1,6 +1,6 @@
 //! VRF logic
 use crate::{Config, LocalVrfOutput, RandomnessResults};
-use codec::Decode;
+use codec::{Decode, Encode};
 pub use primitives_vrf::{make_vrf_transcript, PreDigest, VRF_ENGINE_ID, AUTHOR_PUBKEY, VRF_INOUT_CONTEXT};
 use sp_core::crypto::ByteArray;
 use sp_core::sr25519::Public;
@@ -34,14 +34,12 @@ pub(crate) fn get_and_verify_randomness<T: Config>(need_verify: bool) -> T::Hash
 		.filter_map(|(id, mut data)| {
 			log::warn!("id: {:?}", id);
 			if id == VRF_ENGINE_ID {
-				log::warn!("VRF PreDigest included in digests");
 				if let Ok(vrf_digest) = PreDigest::decode(&mut data) {
 					Some(vrf_digest)
 				} else {
 					panic!("VRF digest encoded in pre-runtime digest must be valid");
 				}
 			} else {
-				log::warn!("Author public key included in digests");
 				if id == AUTHOR_PUBKEY {
 					block_author_vrf_id = Some(Public::decode(&mut data)
 						.expect("author public key encoded in pre-runtime digest must be valid"));
@@ -51,16 +49,17 @@ pub(crate) fn get_and_verify_randomness<T: Config>(need_verify: bool) -> T::Hash
 		})
 		.next()
 		.expect("VRF PreDigest was not included in the digests (check rand key is in keystore)");
-	log::warn!("block author vrf id: {:?}", block_author_vrf_id);
-	let block_author_vrf_id =
-		block_author_vrf_id.expect("VrfId encoded in pre-runtime digest must be valid");
-	let block_author_vrf_id = schnorrkel::PublicKey::from_bytes(block_author_vrf_id.as_slice())
-		.expect("Expect VrfId to be valid schnorrkel public key");
-	// VRF input is last block's VRF output
-	let vrf_input_transcript =
-		make_vrf_transcript::<T::Hash>(LocalVrfOutput::<T>::get().unwrap_or_default());
+	log::info!("block author vrf id: {:?}", block_author_vrf_id);
+
 	// Verify VRF output + proof using input transcript + block author's VrfId
 	if need_verify {
+		let block_author_vrf_id =
+			block_author_vrf_id.expect("VrfId encoded in pre-runtime digest must be valid");
+		let block_author_vrf_id = schnorrkel::PublicKey::from_bytes(block_author_vrf_id.as_slice())
+			.expect("Expect VrfId to be valid schnorrkel public key");
+		// VRF input is last block's VRF output
+		let vrf_input_transcript =
+			make_vrf_transcript::<T::Hash>(LocalVrfOutput::<T>::get().unwrap_or_default());
 		assert!(
 			block_author_vrf_id
 				.vrf_verify(vrf_input_transcript.0.clone(), &vrf_output.0, &vrf_proof.0)
@@ -68,13 +67,8 @@ pub(crate) fn get_and_verify_randomness<T: Config>(need_verify: bool) -> T::Hash
 			"VRF signature verification failed"
 		);
 	}
-	// Transform VrfOutput into randomness bytes stored on-chain
-	let randomness: Randomness = vrf_output
-		.0
-		.attach_input_hash(&block_author_vrf_id, vrf_input_transcript.0.clone())
-		.ok()
-		.map(|inout| inout.make_bytes(&VRF_INOUT_CONTEXT))
-		.expect("Transforming VrfOutput into randomness bytes failed");
+
+	let randomness = vrf_output.encode();
 	T::Hash::decode(&mut &randomness[..])
 		.ok()
 		.expect("Bytes can be decoded into T::Hash")
