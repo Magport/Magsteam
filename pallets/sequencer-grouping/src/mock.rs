@@ -54,7 +54,7 @@ impl frame_system::Config for Test {
 impl pallet_sequencer_grouping::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = ();
-	type Randomness = pallet_sequencer_grouping::SimpleRandomness<Self>;
+	// type Randomness = pallet_sequencer_grouping::SimpleRandomness<Self>;
 	type MaxGroupSize = ConstU32<5u32>;
 	type MaxGroupNumber = ConstU32<10u32>;
 	type MaxLengthIP = ConstU32<15u32>;

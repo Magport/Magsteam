@@ -13,6 +13,8 @@ mod benchmarking;
 pub mod weights;
 pub use weights::*;
 
+pub mod vrf;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use super::*;
@@ -35,7 +37,7 @@ pub mod pallet {
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
 		type WeightInfo: WeightInfo;
-		type Randomness: Randomness<Self::Hash, BlockNumberFor<Self>>;
+		// type Randomness: Randomness<Self::Hash, BlockNumberFor<Self>>;
 
 		/// Maximum size of each sequencer group
 		#[pallet::constant]
@@ -73,6 +75,22 @@ pub mod pallet {
 		pub starting_block: BlockNumber,
 		pub round_index: RoundIndex,
 	}
+
+	/// Records whether this is the first block (genesis or runtime upgrade)
+	#[pallet::storage]
+	#[pallet::getter(fn not_first_block)]
+	pub type NotFirstBlock<T: Config> = StorageValue<_, ()>;
+
+	/// Current local per-block VRF randomness
+	/// Set in `on_initialize`
+	#[pallet::storage]
+	#[pallet::getter(fn local_vrf_output)]
+	pub type LocalVrfOutput<T: Config> = StorageValue<_, Option<T::Hash>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn randomness_results)]
+	pub type RandomnessResults<T: Config> =
+	StorageMap<_, Twox64Concat, BlockNumberFor<T>, Option<T::Hash>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn group_members)]
@@ -204,27 +222,29 @@ pub mod pallet {
 		}
 	}
 
-	pub struct SimpleRandomness<T>(PhantomData<T>);
-
-	impl<T: Config> Randomness<T::Hash, BlockNumberFor<T>> for SimpleRandomness<T> {
-		fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
-			let hash = T::Hashing::hash(subject);
-			let current_block = frame_system::Pallet::<T>::block_number();
-			(hash, current_block)
-		}
-
-		fn random_seed() -> (T::Hash, BlockNumberFor<T>) {
-			Self::random(b"seed")
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
+			// Do not set the output in the first block (genesis or runtime upgrade)
+			// because we do not have any input for author to sign
+			if NotFirstBlock::<T>::get().is_none() {
+				NotFirstBlock::<T>::put(());
+				LocalVrfOutput::<T>::put(Some(T::Hash::default()));
+				return T::DbWeight::get().reads_writes(1, 2);
+			}
+			// Verify VRF output included by block author and set it in storage
+			vrf::verify_and_set_output::<T>();
+			T::WeightInfo::register_processor()
 		}
 	}
 
 	impl<T: Config> Pallet<T> {
 		pub fn shuffle_accounts(mut accounts: Vec<T::AccountId>) -> Vec<T::AccountId> {
-			// let random_seed = Self::get_and_increment_nonce();
-			let random_seed = frame_system::Pallet::<T>::parent_hash().encode();
-			// let random_value = T::Randomness::random(&random_seed);
-			// let random_value = <u64>::decode(&mut random_value.0.as_ref()).unwrap_or(0);
-			let random_value = random_seed[0];
+			// let random_seed = frame_system::Pallet::<T>::parent_hash().encode();
+			let random_seed = b"vrf-rand";
+			// let random_value = T::Randomness::random(random_seed);
+			let random_value = vrf::get_and_verify_randomness::<T>(false);
+			let random_value = <u64>::decode(&mut random_value.as_ref()).unwrap_or(0);
 			for i in (1..accounts.len()).rev() {
 				let j: usize = (random_value as usize) % (i + 1);
 				accounts.swap(i, j);

@@ -90,6 +90,7 @@ parachain-info = { workspace = true, default-features = false }
 pallet-sequencer-grouping ={ workspace = true, default-features = false }
 pallet-sequencer-staking ={ workspace = true, default-features = false }
 pallet-container = { workspace = true , default-features = false }
+#pallet-randomness = { workspace = true }
 primitives-container = { workspace = true , default-features = false }
 primitives-vrf = { workspace = true }
 

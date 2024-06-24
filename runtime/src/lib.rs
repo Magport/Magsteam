@@ -49,7 +49,7 @@ use frame_system::{
 	EnsureRoot,
 };
 pub use pallet_container;
-use pallet_sequencer_grouping::SimpleRandomness;
+// use pallet_sequencer_grouping::SimpleRandomness;
 use pallet_sequencer_staking::WeightInfo;
 use pallet_xcm::{EnsureXcm, IsVoiceOfBody};
 use parachains_common::message_queue::{NarrowOriginToSibling, ParaIdToSibling};
@@ -576,7 +576,7 @@ impl pallet_sequencer_grouping::Config for Runtime {
 	type WeightInfo = pallet_sequencer_grouping::weights::SubstrateWeight<Runtime>;
 	type MaxGroupSize = ConstU32<100>;
 	type MaxGroupNumber = ConstU32<100>;
-	type Randomness = SimpleRandomness<Self>;
+	// type Randomness = RandomnessPallet;
 	type MaxLengthIP = ConstU32<15>;
 	type MaxRunningAPP = ConstU32<10>;
 }
@@ -598,6 +598,12 @@ impl pallet_container::Config for Runtime {
 	type MaxArgCount = MaxArgCount;
 	type MaxArgLength = MaxArgLength;
 }
+
+// impl pallet_randomness::Config for Runtime {
+// 	type RuntimeEvent = RuntimeEvent;
+// 	type WeightInfo = pallet_randomness::weights::SubstrateWeight<Runtime>;
+//
+// }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
@@ -636,6 +642,7 @@ construct_runtime!(
 		SequencerStaking: pallet_sequencer_staking = 40,
 		SequencerGroupingPallet: pallet_sequencer_grouping = 41,
 		ContainerPallet:pallet_container = 51,
+		// RandomnessPallet:pallet_randomness = 52,
 	}
 );
 
@@ -654,6 +661,7 @@ mod benches {
 		[cumulus_pallet_xcmp_queue, XcmpQueue]
 		[pallet_container, ContainerPallet]
 		[pallet_sequencer_grouping, SequencerGroupingPallet]
+		[pallet_randomness, RandomnessPallet]
 	);
 }
 
@@ -822,16 +830,10 @@ impl_runtime_apis! {
 	impl primitives_vrf::VrfApi<Block> for Runtime {
 		fn get_last_vrf_output() -> Option<<Block as BlockT>::Hash> {
 			// TODO: remove in future runtime upgrade along with storage item
-			// if pallet_randomness::Pallet::<Self>::not_first_block().is_none() {
-			// 	return None;
-			// }
-			// pallet_randomness::Pallet::<Self>::local_vrf_output()
-			// log::warn!("vrf output default: {:?}", 135);
-			let number: u64 = 13;
-			let mut bytes = [0u8; 32];
-    		bytes[0..8].copy_from_slice(&number.to_le_bytes());
-            let hash_value: H256 = bytes.into();
-			Option::from(hash_value)
+			if pallet_sequencer_grouping::Pallet::<Self>::not_first_block().is_none() {
+				return None;
+			}
+			pallet_sequencer_grouping::Pallet::<Self>::local_vrf_output()
 		}
 	}
 

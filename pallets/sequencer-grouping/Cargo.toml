@@ -18,6 +18,10 @@ scale-info = { workspace = true, default-features = false, features = [ "derive"
 sp-runtime = { workspace = true, default-features = false }
 sp-std = { workspace = true, default-features = false }
 sp-core = { workspace = true, default-features = false }
+schnorrkel = { workspace = true }
+
+# Local
+primitives-vrf = { workspace = true }
 
 [dev-dependencies]
 pallet-balances = { workspace = true, default-features = false, features = [ "insecure_zero_ed", "std" ] }

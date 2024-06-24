@@ -1,6 +1,6 @@
 use frame_support::{derive_impl, parameter_types, traits::Everything};
 use frame_system as system;
-use pallet_sequencer_grouping::SimpleRandomness;
+// use pallet_sequencer_grouping::SimpleRandomness;
 use sp_core::{ConstU32, H256};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup},
@@ -54,7 +54,7 @@ impl pallet_sequencer_grouping::Config for Test {
 	type WeightInfo = ();
 	type MaxGroupSize = ConstU32<100>;
 	type MaxGroupNumber = ConstU32<100>;
-	type Randomness = SimpleRandomness<Self>;
+	// type Randomness = SimpleRandomness<Self>;
 	type MaxLengthIP = ConstU32<15>;
 	type MaxRunningAPP = ConstU32<20>;
 }

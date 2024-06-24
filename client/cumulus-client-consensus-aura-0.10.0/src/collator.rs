@@ -178,6 +178,7 @@ where
 		Box<dyn Error + Send + 'static>,
 	> {
 		let mut digest = additional_pre_digest.into().unwrap_or_default();
+		log::warn!("collate digest: {:?}", digest);
 		digest.push(slot_claim.pre_digest.clone());
 
 		let maybe_proposal = self

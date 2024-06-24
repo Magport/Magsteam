@@ -252,16 +252,19 @@ where
 				parent_hash.into(),
 			);
 			log::warn!("vrf digest: {:?}", vrf_digest);
-			let mut vrf_digest_vec = vrf_digest.map(|item| vec![item]);
-			vrf_digest_vec.get_or_insert_with(|| vec![]).push(DigestItem::PreRuntime(AUTHOR_PUBKEY, author_public.encode()));
-			log::warn!("vrf digest vec: {:?}", vrf_digest_vec.clone());
+
+			let mut vrf_digest_vec = vec![DigestItem::PreRuntime(AUTHOR_PUBKEY, author_public.encode())];
+			if let Some(mut vrf_digest) = vrf_digest {
+				vrf_digest_vec.push(vrf_digest);
+			}
+			log::warn!("vrf digest vec: {:?}", vrf_digest_vec);
 
 			let maybe_collation = try_request!(
 				collator
 					.collate(
 						&parent_header,
 						&claim,
-						vrf_digest_vec,
+						Some(vrf_digest_vec),
 						(parachain_inherent_data, other_inherent_data),
 						params.authoring_duration,
 						// Set the block limit to 50% of the maximum PoV size.
