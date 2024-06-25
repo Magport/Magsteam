@@ -98,24 +98,23 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().writes(1))
 	}
 
-	/// Storage: Randomness NotFirstBlock (r:1 w:0)
-	/// Proof Skipped: Randomness NotFirstBlock (max_values: Some(1), max_size: None, mode: Measured)
-	/// Storage: System Digest (r:1 w:0)
-	/// Proof Skipped: System Digest (max_values: Some(1), max_size: None, mode: Measured)
-	/// Storage: AuthorMapping MappingWithDeposit (r:1 w:0)
-	/// Proof Skipped: AuthorMapping MappingWithDeposit (max_values: None, max_size: None, mode: Measured)
-	/// Storage: Randomness LocalVrfOutput (r:1 w:1)
-	/// Proof Skipped: Randomness LocalVrfOutput (max_values: Some(1), max_size: None, mode: Measured)
-	/// Storage: Randomness RandomnessResults (r:1 w:1)
-	/// Proof Skipped: Randomness RandomnessResults (max_values: None, max_size: None, mode: Measured)
+	/// Storage: `SequencerGroupingPallet::NotFirstBlock` (r:1 w:0)
+	/// Proof: `SequencerGroupingPallet::NotFirstBlock` (`max_values`: Some(1), `max_size`: Some(0), added: 495, mode: `MaxEncodedLen`)
+	/// Storage: `System::Digest` (r:1 w:0)
+	/// Proof: `System::Digest` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `SequencerGroupingPallet::LocalVrfOutput` (r:1 w:1)
+	/// Proof: `SequencerGroupingPallet::LocalVrfOutput` (`max_values`: Some(1), `max_size`: Some(33), added: 528, mode: `MaxEncodedLen`)
+	/// Storage: `SequencerGroupingPallet::RandomnessResults` (r:0 w:1)
+	/// Proof: `SequencerGroupingPallet::RandomnessResults` (`max_values`: None, `max_size`: Some(45), added: 2520, mode: `MaxEncodedLen`)
 	fn on_initialize() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `719`
-		//  Estimated: `14980`
-		// Minimum execution time: 1_190_265_000 picoseconds.
-		Weight::from_parts(1_191_969_000, 14980)
-			.saturating_add(T::DbWeight::get().reads(5_u64))
-			.saturating_add(T::DbWeight::get().writes(2_u64))
+		//  Measured:  `294`
+		//  Estimated: `1779`
+		// Minimum execution time: 343_000_000 picoseconds.
+		Weight::from_parts(353_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 1779))
+			.saturating_add(T::DbWeight::get().reads(3))
+			.saturating_add(T::DbWeight::get().writes(2))
 	}
 }
 
@@ -174,24 +173,22 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(1))
 	}
 
-	/// Storage: Randomness NotFirstBlock (r:1 w:0)
-	/// Proof Skipped: Randomness NotFirstBlock (max_values: Some(1), max_size: None, mode: Measured)
-	/// Storage: System Digest (r:1 w:0)
-	/// Proof Skipped: System Digest (max_values: Some(1), max_size: None, mode: Measured)
-	/// Storage: AuthorMapping MappingWithDeposit (r:1 w:0)
-	/// Proof Skipped: AuthorMapping MappingWithDeposit (max_values: None, max_size: None, mode: Measured)
-	/// Storage: Randomness LocalVrfOutput (r:1 w:1)
-	/// Proof Skipped: Randomness LocalVrfOutput (max_values: Some(1), max_size: None, mode: Measured)
-	/// Storage: Randomness RandomnessResults (r:1 w:1)
-	/// Proof Skipped: Randomness RandomnessResults (max_values: None, max_size: None, mode: Measured)
+	/// Storage: `SequencerGroupingPallet::NotFirstBlock` (r:1 w:0)
+	/// Proof: `SequencerGroupingPallet::NotFirstBlock` (`max_values`: Some(1), `max_size`: Some(0), added: 495, mode: `MaxEncodedLen`)
+	/// Storage: `System::Digest` (r:1 w:0)
+	/// Proof: `System::Digest` (`max_values`: Some(1), `max_size`: None, mode: `Measured`)
+	/// Storage: `SequencerGroupingPallet::LocalVrfOutput` (r:1 w:1)
+	/// Proof: `SequencerGroupingPallet::LocalVrfOutput` (`max_values`: Some(1), `max_size`: Some(33), added: 528, mode: `MaxEncodedLen`)
+	/// Storage: `SequencerGroupingPallet::RandomnessResults` (r:0 w:1)
+	/// Proof: `SequencerGroupingPallet::RandomnessResults` (`max_values`: None, `max_size`: Some(45), added: 2520, mode: `MaxEncodedLen`)
 	fn on_initialize() -> Weight {
 		// Proof Size summary in bytes:
-		//  Measured:  `719`
-		//  Estimated: `14980`
-		// Minimum execution time: 1_190_265_000 picoseconds.
-		Weight::from_parts(1_191_969_000, 14980)
-			.saturating_add(RocksDbWeight::get().reads(5_u64))
-			.saturating_add(RocksDbWeight::get().writes(2_u64))
+		//  Measured:  `294`
+		//  Estimated: `1779`
+		// Minimum execution time: 343_000_000 picoseconds.
+		Weight::from_parts(353_000_000, 0)
+			.saturating_add(Weight::from_parts(0, 1779))
+			.saturating_add(RocksDbWeight::get().reads(3))
+			.saturating_add(RocksDbWeight::get().writes(2))
 	}
-
 }

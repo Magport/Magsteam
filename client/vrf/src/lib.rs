@@ -4,7 +4,7 @@ use polkadot_primitives::PARACHAIN_KEY_TYPE_ID;
 use schnorrkel::keys::PublicKey;
 use sp_core::sr25519::Public;
 use primitives_vrf::{make_vrf_transcript, PreDigest, VrfApi};
-use sp_application_crypto::{AppCrypto, ByteArray};
+use sp_application_crypto::ByteArray;
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 

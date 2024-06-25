@@ -4,11 +4,10 @@ pub use pallet::*;
 
 #[cfg(test)]
 mod mock;
-
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "runtime-benchmarks")]
+#[cfg(any(test, feature = "runtime-benchmarks"))]
 mod benchmarking;
 pub mod weights;
 pub use weights::*;
@@ -20,10 +19,9 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{
 		pallet_prelude::*,
-		traits::{BuildGenesisConfig, Randomness},
+		traits::BuildGenesisConfig,
 	};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::Hash;
 	use sp_std::vec::Vec;
 
 	pub type RoundIndex = u32;
@@ -239,11 +237,9 @@ pub mod pallet {
 	}
 
 	impl<T: Config> Pallet<T> {
-		pub fn shuffle_accounts(mut accounts: Vec<T::AccountId>) -> Vec<T::AccountId> {
+		pub fn shuffle_accounts(accounts: Vec<T::AccountId>) -> Vec<T::AccountId> {
 			let random_value = vrf::get_and_verify_randomness::<T>(false);
-			log::warn!("random_value: {:?}", random_value);
 			let random_value = <u64>::decode(&mut random_value.as_ref()).unwrap_or(0);
-			log::warn!("random_value as u64: {:?}", random_value);
 
 			let mut keyed_vec: Vec<(u64, T::AccountId)> = accounts.iter()
 				.enumerate()

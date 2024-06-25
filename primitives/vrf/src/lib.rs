@@ -3,7 +3,7 @@
 //! VRF pre vrf object and conversion to DigestItem
 use codec::{Decode, Encode};
 use sp_core::sr25519::vrf::{VrfPreOutput, VrfProof, VrfInput, VrfSignData, VrfSignature};
-use sp_runtime::{generic::DigestItem, RuntimeDebug, BoundToRuntimeAppPublic, ConsensusEngineId};
+use sp_runtime::{generic::DigestItem, RuntimeDebug, ConsensusEngineId};
 use sp_application_crypto::KeyTypeId;
 
 /// Raw VRF pre-vrf.

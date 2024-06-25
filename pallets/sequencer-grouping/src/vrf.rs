@@ -4,12 +4,9 @@ use codec::{Decode, Encode};
 pub use primitives_vrf::{make_vrf_transcript, PreDigest, VRF_ENGINE_ID, AUTHOR_PUBKEY, VRF_INOUT_CONTEXT};
 use sp_core::crypto::ByteArray;
 use sp_core::sr25519::Public;
-use sp_core::sr25519::vrf::{VrfPreOutput, VrfProof};
-use sp_runtime::DigestItem::PreRuntime;
 
 /// VRF output
 pub const RANDOMNESS_LENGTH: usize = 32;
-type Randomness = [u8; RANDOMNESS_LENGTH];
 
 /// Gets VRF output from system digests and verifies it using the block author's VrfId
 /// Transforms VRF output into randomness value and puts it into `LocalVrfOutput`
@@ -32,9 +29,10 @@ pub(crate) fn get_and_verify_randomness<T: Config>(need_verify: bool) -> T::Hash
 		.iter()
 		.filter_map(|s| s.as_pre_runtime())
 		.filter_map(|(id, mut data)| {
-			log::warn!("id: {:?}", id);
 			if id == VRF_ENGINE_ID {
 				if let Ok(vrf_digest) = PreDigest::decode(&mut data) {
+					let encoded = vrf_digest.encode();
+					let hex_string = hex::encode(&encoded);
 					Some(vrf_digest)
 				} else {
 					panic!("VRF digest encoded in pre-runtime digest must be valid");
@@ -49,7 +47,6 @@ pub(crate) fn get_and_verify_randomness<T: Config>(need_verify: bool) -> T::Hash
 		})
 		.next()
 		.expect("VRF PreDigest was not included in the digests (check rand key is in keystore)");
-	log::info!("block author vrf id: {:?}", block_author_vrf_id);
 
 	// Verify VRF output + proof using input transcript + block author's VrfId
 	if need_verify {

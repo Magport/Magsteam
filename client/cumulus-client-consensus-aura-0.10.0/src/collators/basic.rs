@@ -46,7 +46,7 @@ use sp_consensus_aura::{AuraApi, SlotDuration};
 use sp_core::crypto::Pair;
 use sp_inherents::CreateInherentDataProviders;
 use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::traits::{Block as BlockT, Header as HeaderT, Member};
+use sp_runtime::traits::{Header as HeaderT, Member};
 use sp_state_machine::Backend as _;
 use std::{convert::TryFrom, sync::Arc, time::Duration};
 use sp_runtime::DigestItem;
@@ -254,7 +254,7 @@ where
 			log::warn!("vrf digest: {:?}", vrf_digest);
 
 			let mut vrf_digest_vec = vec![DigestItem::PreRuntime(AUTHOR_PUBKEY, author_public.encode())];
-			if let Some(mut vrf_digest) = vrf_digest {
+			if let Some(vrf_digest) = vrf_digest {
 				vrf_digest_vec.push(vrf_digest);
 			}
 			log::warn!("vrf digest vec: {:?}", vrf_digest_vec);
