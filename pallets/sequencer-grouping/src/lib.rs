@@ -234,7 +234,7 @@ pub mod pallet {
 			}
 			// Verify VRF output included by block author and set it in storage
 			vrf::verify_and_set_output::<T>();
-			T::WeightInfo::register_processor()
+			T::WeightInfo::on_initialize()
 		}
 	}
 
@@ -243,12 +243,18 @@ pub mod pallet {
 			let random_value = vrf::get_and_verify_randomness::<T>(false);
 			log::warn!("random_value: {:?}", random_value);
 			let random_value = <u64>::decode(&mut random_value.as_ref()).unwrap_or(0);
-			for i in (1..accounts.len()).rev() {
-				let j: usize = (random_value as usize) % (i + 1);
-				accounts.swap(i, j);
-			}
+			log::warn!("random_value as u64: {:?}", random_value);
 
-			accounts
+			let mut keyed_vec: Vec<(u64, T::AccountId)> = accounts.iter()
+				.enumerate()
+				.map(|(i, x)| {
+					let key = random_value.wrapping_add(i as u64).wrapping_mul(2654435761).rotate_right(13);
+					(key, x.clone())
+				})
+				.collect();
+			keyed_vec.sort_by(|a, b| a.0.cmp(&b.0));
+			keyed_vec.into_iter().map(|(_, x)| x).collect()
+
 		}
 
 		pub fn assign_processors_to_groups(group_number: u32) -> DispatchResult {
